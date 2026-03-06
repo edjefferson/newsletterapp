@@ -12,11 +12,14 @@ function esc(str) {
 }
 
 function injectStyle(html) {
+  const dark = document.body.classList.contains('dark');
+  // Always inject light colours — dark mode is handled by CSS invert() on the iframe element.
   return `<style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
            font-size: 15px; line-height: 1.6; color: #1a1a1a;
+           background: #ffffff;
            padding: 20px; max-width: 700px; margin: 0 auto; }
-    img  { max-width: 100%; height: auto; }
+    img  { max-width: 100%; height: auto; ${dark ? 'filter: invert(1) hue-rotate(180deg);' : ''} }
     a    { color: #2563eb; }
   </style>${html}`;
 }

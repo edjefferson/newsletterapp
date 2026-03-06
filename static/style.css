@@ -34,7 +34,7 @@ body {
 }
 
 /* ── Layout ── */
-.container { max-width: 780px; margin: 0 auto; padding: 0 16px; }
+.container { max-width: 780px; margin: 0 auto; padding: 0 8px; }
 
 header {
   background: var(--surface);
@@ -198,6 +198,9 @@ button {
   border: none;
   display: block;
   min-height: 200px;
+}
+body.dark .reader-frame {
+  filter: invert(1) hue-rotate(180deg);
 }
 
 .reader-text {

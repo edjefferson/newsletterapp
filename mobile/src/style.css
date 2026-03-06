@@ -199,6 +199,9 @@ button {
   display: block;
   min-height: 200px;
 }
+body.dark .reader-frame {
+  filter: invert(1) hue-rotate(180deg);
+}
 
 .reader-text {
   padding: 24px;

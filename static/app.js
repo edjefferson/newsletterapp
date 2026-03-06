@@ -275,12 +275,15 @@ function escHtml(str) {
 }
 
 function sanitizeHtml(html) {
-  // Inject a base style for comfortable reading inside the iframe
+  const dark = document.body.classList.contains("dark");
+  // Inject a base style for comfortable reading inside the iframe.
+  // Always use light colours — dark mode is handled by CSS invert() on the iframe element.
   const style = `<style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-           font-size: 15px; line-height: 1.6; color: #1a1a1a; padding: 20px;
-           max-width: 700px; margin: 0 auto; }
-    img { max-width: 100%; height: auto; }
+           font-size: 15px; line-height: 1.6; color: #1a1a1a;
+           background: #ffffff;
+           padding: 20px; max-width: 700px; margin: 0 auto; }
+    img { max-width: 100%; height: auto; ${dark ? "filter: invert(1) hue-rotate(180deg);" : ""} }
     a { color: #2563eb; }
   </style>`;
   // Strip <script> and on* attrs simply via regex (BSoup handled server-side already)
