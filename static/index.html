@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Newsletters</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header>
+    <div class="container header-inner">
+      <h1>Newsletters</h1>
+      <button class="btn-primary" id="sync-btn">Sync</button>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="filter-bar">
+      <button class="filter-btn active" data-filter="all">All</button>
+      <button class="filter-btn" data-filter="unread">Unread</button>
+    </div>
+    <div class="status-bar" id="status"></div>
+    <ul class="list" id="newsletter-list"></ul>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
