@@ -291,6 +291,20 @@ function sanitizeHtml(html) {
 
 async function initLogin() {
   if (getToken()) { window.location.href = "/"; return; }
+
+  const pwInput = document.getElementById("password");
+  const pwToggle = document.getElementById("pw-toggle");
+  const eyeIcon = document.getElementById("eye-icon");
+  const eyeOffPath = `<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-8-10-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 8 10 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>`;
+  const eyeOnPath = `<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>`;
+
+  pwToggle.addEventListener("click", () => {
+    const visible = pwInput.type === "text";
+    pwInput.type = visible ? "password" : "text";
+    eyeIcon.innerHTML = visible ? eyeOnPath : eyeOffPath;
+    pwToggle.setAttribute("aria-label", visible ? "Show password" : "Hide password");
+  });
+
   const form = document.getElementById("login-form");
   const errorEl = document.getElementById("login-error");
   form.addEventListener("submit", async (e) => {
@@ -313,9 +327,32 @@ async function initLogin() {
   });
 }
 
+/* ── Dark mode ── */
+
+function applyTheme(dark) {
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  const btn = document.getElementById("theme-btn");
+  if (btn) btn.textContent = dark ? "Light" : "Dark";
+}
+
+function initTheme() {
+  const saved = localStorage.getItem("theme");
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  applyTheme(saved ? saved === "dark" : prefersDark);
+  const btn = document.getElementById("theme-btn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+      localStorage.setItem("theme", isDark ? "light" : "dark");
+      applyTheme(!isDark);
+    });
+  }
+}
+
 /* ── Bootstrap ── */
 
 document.addEventListener("DOMContentLoaded", () => {
+  initTheme();
   if (document.getElementById("login-form")) { initLogin(); return; }
   requireAuth();
   if (document.getElementById("newsletter-list")) initIndex();

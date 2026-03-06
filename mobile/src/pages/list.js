@@ -1,6 +1,25 @@
 import { Network } from '@capacitor/network';
+import { Preferences } from '@capacitor/preferences';
 import { getNewsletters, getSyncMeta } from '../db.js';
 import { syncFromServer } from '../sync.js';
+
+async function getTheme() {
+  const { value } = await Preferences.get({ key: 'theme' });
+  return value;
+}
+async function setTheme(value) {
+  await Preferences.set({ key: 'theme', value });
+}
+async function initTheme() {
+  const saved = await getTheme();
+  const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  applyTheme(dark);
+}
+function applyTheme(dark) {
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  const btn = document.getElementById('theme-btn');
+  if (btn) btn.textContent = dark ? 'Light' : 'Dark';
+}
 
 function formatDate(iso) {
   const d = new Date(iso);
@@ -23,6 +42,7 @@ export async function renderList(app) {
     <header>
       <div class="container header-inner">
         <h1>Newsletters</h1>
+        <button class="theme-btn" id="theme-btn">Dark</button>
         <button class="btn-primary" id="sync-btn">Sync</button>
       </div>
     </header>
@@ -114,6 +134,13 @@ export async function renderList(app) {
   }
 
   syncBtn.addEventListener('click', doSync);
+
+  await initTheme();
+  document.getElementById('theme-btn').addEventListener('click', async () => {
+    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    await setTheme(isDark ? 'light' : 'dark');
+    applyTheme(!isDark);
+  });
 
   // Load local data immediately, then sync in background
   await loadPage(1);
