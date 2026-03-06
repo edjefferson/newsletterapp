@@ -317,7 +317,8 @@ async function initLogin() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ password }),
       });
-      if (!res.ok) { errorEl.textContent = "Wrong password."; return; }
+      if (res.status === 401) { errorEl.textContent = "Wrong password."; return; }
+      if (!res.ok) { errorEl.textContent = `Server error (${res.status}) — check APP_PASSWORD and SECRET_KEY are set.`; return; }
       const data = await res.json();
       setToken(data.token);
       window.location.href = "/";
