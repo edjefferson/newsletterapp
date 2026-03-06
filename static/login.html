@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sign in</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .login-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .login-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      width: 100%;
+      max-width: 360px;
+      box-shadow: var(--shadow);
+    }
+    .login-card h1 { font-size: 1.125rem; margin-bottom: 24px; }
+    .login-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+    .login-field label { font-size: .8125rem; color: var(--muted); }
+    .login-field input {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 8px 12px;
+      font-size: .9375rem;
+      width: 100%;
+      outline: none;
+    }
+    .login-field input:focus { border-color: var(--accent); }
+    .login-error { color: #dc2626; font-size: .8125rem; margin-bottom: 12px; min-height: 18px; }
+    .login-card .btn-primary { width: 100%; padding: 10px; font-size: .9375rem; }
+  </style>
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-card">
+      <h1>Newsletters</h1>
+      <form id="login-form">
+        <div class="login-field">
+          <label for="password">Password</label>
+          <input type="password" id="password" autocomplete="current-password" autofocus />
+        </div>
+        <div class="login-error" id="login-error"></div>
+        <button type="submit" class="btn-primary">Sign in</button>
+      </form>
+    </div>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
