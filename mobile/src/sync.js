@@ -19,13 +19,16 @@ async function flushPendingProgress() {
 }
 
 async function pullProgressUpdates() {
-  const updates = await apiFetch('/api/newsletters/progress');
-  await applyServerProgress(updates);
+  try {
+    const updates = await apiFetch('/api/newsletters/progress');
+    await applyServerProgress(updates);
+  } catch {
+    // Non-fatal — progress will sync next time
+  }
 }
 
 export async function syncFromServer(onProgress = null) {
   await flushPendingProgress();
-  await pullProgressUpdates();
 
   const afterId = await getMaxServerId();
 
@@ -52,6 +55,9 @@ export async function syncFromServer(onProgress = null) {
     if (newsletters.length < pageSize) break;
     page++;
   }
+
+  // Pull server read states last so they overwrite anything set by upsertNewsletters
+  await pullProgressUpdates();
 
   // Clear body content from anything older than the window (respects keep_offline flag)
   await pruneOldContent(OFFLINE_DAYS);
