@@ -94,6 +94,17 @@ export async function markProgressSynced(serverId) {
   await db.run('UPDATE newsletters SET progress_dirty = 0 WHERE server_id = ?', [serverId]);
 }
 
+export async function applyServerProgress(updates) {
+  for (const u of updates) {
+    // Only overwrite if not dirty (local unsynced change takes priority)
+    await db.run(
+      `UPDATE newsletters SET is_read = ?, scroll_position = ?
+       WHERE server_id = ? AND progress_dirty = 0`,
+      [u.is_read ? 1 : 0, u.scroll_position, u.server_id]
+    );
+  }
+}
+
 export async function getMaxServerId() {
   const result = await db.query('SELECT MAX(server_id) as max_id FROM newsletters');
   return result.values?.[0]?.max_id || 0;

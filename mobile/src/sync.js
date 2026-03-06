@@ -1,5 +1,5 @@
 import { apiFetch } from './api.js';
-import { upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced } from './db.js';
+import { upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced, applyServerProgress, getSyncMeta } from './db.js';
 
 const OFFLINE_DAYS = 30;
 
@@ -18,8 +18,16 @@ async function flushPendingProgress() {
   }
 }
 
+async function pullProgressUpdates() {
+  const lastSync = await getSyncMeta('last_sync');
+  const sinceParam = lastSync ? `?since=${encodeURIComponent(lastSync)}` : '';
+  const updates = await apiFetch(`/api/newsletters/progress${sinceParam}`);
+  await applyServerProgress(updates);
+}
+
 export async function syncFromServer(onProgress = null) {
   await flushPendingProgress();
+  await pullProgressUpdates();
 
   const afterId = await getMaxServerId();
 

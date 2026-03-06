@@ -92,6 +92,27 @@ def get_newsletter(newsletter_id: int, db: Session = Depends(get_db)):
     )
 
 
+@router.get("/progress")
+def list_progress(
+    since: Optional[datetime] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Return read-state for all newsletters updated since `since` (for mobile sync)."""
+    q = db.query(ReadingProgress)
+    if since:
+        q = q.filter(ReadingProgress.updated_at > since)
+    rows = q.all()
+    return [
+        {
+            "server_id": r.newsletter_id,
+            "is_read": r.is_read,
+            "scroll_position": r.scroll_position,
+            "updated_at": r.updated_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
 @router.post("/{newsletter_id}/progress")
 def save_progress(newsletter_id: int, update: ProgressUpdate, db: Session = Depends(get_db)):
     n = db.query(Newsletter).filter(Newsletter.id == newsletter_id).first()
