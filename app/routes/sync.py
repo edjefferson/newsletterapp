@@ -1,9 +1,11 @@
 import logging
 import threading
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
-router = APIRouter(prefix="/api", tags=["sync"])
+from ..auth import require_auth
+
+router = APIRouter(prefix="/api", tags=["sync"], dependencies=[Depends(require_auth)])
 logger = logging.getLogger(__name__)
 
 _sync_lock = threading.Lock()

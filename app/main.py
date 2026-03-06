@@ -13,6 +13,7 @@ load_dotenv()
 
 from .database import Base, engine
 from .models import Newsletter, ReadingProgress  # noqa: F401 — ensure models are registered
+from .routes import login as login_router
 from .routes import newsletters as newsletters_router
 from .routes import sync as sync_router
 from .scheduler import start_scheduler, stop_scheduler
@@ -44,10 +45,16 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Newsletter Reader", lifespan=lifespan)
 
+app.include_router(login_router.router)
 app.include_router(newsletters_router.router)
 app.include_router(sync_router.router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.get("/login")
+def login_page():
+    return FileResponse(str(STATIC_DIR / "login.html"))
 
 
 @app.get("/")

@@ -5,10 +5,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from ..auth import require_auth
 from ..database import get_db
 from ..models import Newsletter, ReadingProgress
 
-router = APIRouter(prefix="/api/newsletters", tags=["newsletters"])
+router = APIRouter(prefix="/api/newsletters", tags=["newsletters"], dependencies=[Depends(require_auth)])
 
 
 class NewsletterSummary(BaseModel):

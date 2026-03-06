@@ -2,11 +2,26 @@
 
 const BASE = "";
 
+function getToken() { return localStorage.getItem("auth_token"); }
+function setToken(t) { localStorage.setItem("auth_token", t); }
+function clearToken() { localStorage.removeItem("auth_token"); }
+
+function requireAuth() {
+  if (!getToken() && !window.location.pathname.startsWith("/login")) {
+    window.location.href = "/login";
+  }
+}
+
 async function apiFetch(path, options = {}) {
-  const res = await fetch(BASE + path, {
-    headers: { "Content-Type": "application/json" },
-    ...options,
-  });
+  const headers = { "Content-Type": "application/json" };
+  const token = getToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(BASE + path, { headers, ...options });
+  if (res.status === 401) {
+    clearToken();
+    window.location.href = "/login";
+    return;
+  }
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`${res.status} ${text}`);
@@ -272,9 +287,37 @@ function sanitizeHtml(html) {
   return style + html;
 }
 
+/* ── Login page ── */
+
+async function initLogin() {
+  if (getToken()) { window.location.href = "/"; return; }
+  const form = document.getElementById("login-form");
+  const errorEl = document.getElementById("login-error");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    errorEl.textContent = "";
+    const password = document.getElementById("password").value;
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+      if (!res.ok) { errorEl.textContent = "Wrong password."; return; }
+      const data = await res.json();
+      setToken(data.token);
+      window.location.href = "/";
+    } catch {
+      errorEl.textContent = "Login failed. Try again.";
+    }
+  });
+}
+
 /* ── Bootstrap ── */
 
 document.addEventListener("DOMContentLoaded", () => {
+  if (document.getElementById("login-form")) { initLogin(); return; }
+  requireAuth();
   if (document.getElementById("newsletter-list")) initIndex();
   if (document.getElementById("reader-root")) initReader();
 });
