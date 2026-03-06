@@ -19,8 +19,11 @@ function injectStyle(html) {
            font-size: 15px; line-height: 1.6; color: #1a1a1a;
            background: #ffffff;
            padding: 10px; max-width: 700px; margin: 0 auto; }
-    img  { max-width: 100%; height: auto; ${dark ? 'filter: invert(1) hue-rotate(180deg);' : ''} }
+    img, table { max-width: 100% !important; }
+    img  { height: auto; ${dark ? 'filter: invert(1) hue-rotate(180deg);' : ''} }
+    td, th { word-break: break-word; }
     a    { color: #2563eb; }
+    body { overflow-x: hidden; }
   </style>${html}`;
 }
 
