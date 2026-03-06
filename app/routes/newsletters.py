@@ -34,9 +34,12 @@ class ProgressUpdate(BaseModel):
     is_read: bool = False
 
 
-@router.get("", response_model=list[NewsletterSummary])
+@router.get("", response_model=list[NewsletterDetail])
 def list_newsletters(
     unread: Optional[bool] = Query(None),
+    full: bool = Query(False),
+    after_id: int = Query(0, ge=0),
+    since: Optional[datetime] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
@@ -46,6 +49,10 @@ def list_newsletters(
         q = q.outerjoin(ReadingProgress).filter(
             (ReadingProgress.is_read == None) | (ReadingProgress.is_read == False)
         )
+    if after_id > 0:
+        q = q.filter(Newsletter.id > after_id)
+    if since is not None:
+        q = q.filter(Newsletter.received_at >= since)
     q = q.order_by(Newsletter.received_at.desc())
     newsletters = q.offset((page - 1) * page_size).limit(page_size).all()
 
@@ -53,13 +60,15 @@ def list_newsletters(
     for n in newsletters:
         p = n.progress
         result.append(
-            NewsletterSummary(
+            NewsletterDetail(
                 id=n.id,
                 subject=n.subject,
                 sender=n.sender,
                 received_at=n.received_at,
                 is_read=p.is_read if p else False,
                 scroll_position=p.scroll_position if p else 0,
+                body_html=n.body_html if full else None,
+                body_text=n.body_text if full else None,
             )
         )
     return result
