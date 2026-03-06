@@ -35,12 +35,18 @@ export async function apiFetch(path, options = {}) {
 }
 
 export async function login(password) {
-  const res = await fetch(SERVER_URL + '/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password }),
-  });
-  if (!res.ok) throw new Error('Wrong password');
+  let res;
+  try {
+    res = await fetch(SERVER_URL + '/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+  } catch (err) {
+    throw new Error(`Network error: ${err.message}`);
+  }
+  if (res.status === 401) throw new Error('Wrong password.');
+  if (!res.ok) throw new Error(`Server error (${res.status})`);
   const data = await res.json();
   await setToken(data.token);
 }

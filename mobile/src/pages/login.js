@@ -46,8 +46,8 @@ export function renderLogin(app) {
     try {
       await login(password);
       window.location.hash = '#/';
-    } catch {
-      errorEl.textContent = 'Wrong password.';
+    } catch (err) {
+      errorEl.textContent = err.message || 'Login failed.';
     }
   });
 }

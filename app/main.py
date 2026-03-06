@@ -51,6 +51,7 @@ app.add_middleware(
     allow_origins=[
         "capacitor://localhost",
         "http://localhost",
+        "https://localhost",
         "http://localhost:5173",  # Vite dev server
     ],
     allow_credentials=True,
@@ -63,6 +64,14 @@ app.include_router(newsletters_router.router)
 app.include_router(sync_router.router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+@app.middleware("http")
+async def no_cache_static(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.get("/login")
