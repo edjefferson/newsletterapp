@@ -1,4 +1,5 @@
-import { getNewsletter, saveProgress } from '../db.js';
+import { getNewsletter, saveProgress, markProgressSynced } from '../db.js';
+import { apiFetch } from '../api.js';
 
 function debounce(fn, ms) {
   let t;
@@ -67,8 +68,18 @@ export async function renderReader(app, id) {
   }
 
   async function persist() {
-    await saveProgress(n.id, scrollPos, isRead);
+    await saveProgress(n.id, scrollPos, isRead); // marks dirty=1
     updateBtn();
+    // Try to push to server immediately; dirty flag ensures retry on next sync if offline
+    try {
+      await apiFetch(`/api/newsletters/${n.server_id}/progress`, {
+        method: 'POST',
+        body: JSON.stringify({ scroll_position: scrollPos, is_read: isRead }),
+      });
+      await markProgressSynced(n.server_id);
+    } catch {
+      // Offline or error — will retry via flushPendingProgress on next sync
+    }
   }
 
   document.getElementById('back-btn').addEventListener('click', async () => {
