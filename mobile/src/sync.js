@@ -1,9 +1,26 @@
 import { apiFetch } from './api.js';
-import { upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent } from './db.js';
+import { upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced } from './db.js';
 
 const OFFLINE_DAYS = 30;
 
+async function flushPendingProgress() {
+  const pending = await getPendingProgress();
+  for (const row of pending) {
+    try {
+      await apiFetch(`/api/newsletters/${row.server_id}/progress`, {
+        method: 'POST',
+        body: JSON.stringify({ scroll_position: row.scroll_position, is_read: !!row.is_read }),
+      });
+      await markProgressSynced(row.server_id);
+    } catch {
+      // Still offline — leave dirty, will retry next sync
+    }
+  }
+}
+
 export async function syncFromServer(onProgress = null) {
+  await flushPendingProgress();
+
   const afterId = await getMaxServerId();
 
   // Only ask the server for newsletters within our offline window

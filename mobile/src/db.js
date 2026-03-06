@@ -25,9 +25,9 @@ export async function initDB() {
       keep_offline    INTEGER DEFAULT 0
     );
   `);
-  // Add keep_offline to existing installs that predate this column
-  await db.execute(`ALTER TABLE newsletters ADD COLUMN keep_offline INTEGER DEFAULT 0`)
-    .catch(() => {}); // ignore "duplicate column" error
+  // Migration: add columns to existing installs
+  await db.execute(`ALTER TABLE newsletters ADD COLUMN keep_offline INTEGER DEFAULT 0`).catch(() => {});
+  await db.execute(`ALTER TABLE newsletters ADD COLUMN progress_dirty INTEGER DEFAULT 0`).catch(() => {});
   await db.execute(`
     CREATE TABLE IF NOT EXISTS sync_meta (
       key   TEXT PRIMARY KEY,
@@ -38,14 +38,15 @@ export async function initDB() {
 
 export async function upsertNewsletters(newsletters) {
   const sql = `
-    INSERT INTO newsletters (server_id, subject, sender, received_at, body_html, body_text)
-    VALUES (?, ?, ?, ?, ?, ?)
+    INSERT INTO newsletters (server_id, subject, sender, received_at, body_html, body_text, is_read)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(server_id) DO UPDATE SET
       subject     = excluded.subject,
       sender      = excluded.sender,
       received_at = excluded.received_at,
       body_html   = COALESCE(excluded.body_html, newsletters.body_html),
-      body_text   = COALESCE(excluded.body_text, newsletters.body_text)
+      body_text   = COALESCE(excluded.body_text, newsletters.body_text),
+      is_read     = CASE WHEN newsletters.progress_dirty = 1 THEN newsletters.is_read ELSE excluded.is_read END
   `;
   for (const n of newsletters) {
     await db.run(sql, [
@@ -55,6 +56,7 @@ export async function upsertNewsletters(newsletters) {
       n.received_at,
       n.body_html || null,
       n.body_text || null,
+      n.is_read ? 1 : 0,
     ]);
   }
 }
@@ -76,9 +78,20 @@ export async function getNewsletter(id) {
 
 export async function saveProgress(id, scrollPosition, isRead) {
   await db.run(
-    'UPDATE newsletters SET scroll_position = ?, is_read = ? WHERE id = ?',
+    'UPDATE newsletters SET scroll_position = ?, is_read = ?, progress_dirty = 1 WHERE id = ?',
     [scrollPosition, isRead ? 1 : 0, id]
   );
+}
+
+export async function getPendingProgress() {
+  const result = await db.query(
+    'SELECT server_id, scroll_position, is_read FROM newsletters WHERE progress_dirty = 1'
+  );
+  return result.values || [];
+}
+
+export async function markProgressSynced(serverId) {
+  await db.run('UPDATE newsletters SET progress_dirty = 0 WHERE server_id = ?', [serverId]);
 }
 
 export async function getMaxServerId() {

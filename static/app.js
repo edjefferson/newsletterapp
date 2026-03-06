@@ -163,6 +163,9 @@ async function initIndex() {
   });
 
   await loadList();
+
+  // Re-fetch if browser restores this page from bfcache (e.g. after back navigation from reader)
+  window.addEventListener("pageshow", (e) => { if (e.persisted) loadList(); });
 }
 
 /* ── Reader page ── */
@@ -259,8 +262,8 @@ async function initReader() {
     markReadBtn.className = `mark-read-btn${read ? " is-read" : ""}`;
   }
 
-  markReadBtn.addEventListener("click", () => {
-    saveProgress(scrollPos, !isRead);
+  markReadBtn.addEventListener("click", async () => {
+    await saveProgress(scrollPos, !isRead);
   });
 }
 

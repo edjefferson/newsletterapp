@@ -52,14 +52,11 @@ export async function renderReader(app, id) {
     </main>
   `;
 
-  document.getElementById('back-btn').addEventListener('click', () => {
-    window.location.hash = '#/';
-  });
-
   let isRead = !!n.is_read;
   let scrollPos = n.scroll_position || 0;
   const markReadBtn = document.getElementById('mark-read-btn');
   const frameWrap = document.getElementById('frame-wrap');
+  const scrollCtrl = new AbortController();
 
   function updateBtn() {
     markReadBtn.textContent = isRead ? 'Read' : 'Mark read';
@@ -70,6 +67,12 @@ export async function renderReader(app, id) {
     await saveProgress(n.id, scrollPos, isRead);
     updateBtn();
   }
+
+  document.getElementById('back-btn').addEventListener('click', async () => {
+    scrollCtrl.abort();
+    await persist();
+    window.location.hash = '#/';
+  });
 
   markReadBtn.addEventListener('click', async () => {
     isRead = !isRead;
@@ -99,7 +102,7 @@ export async function renderReader(app, id) {
       const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
       if (atBottom) isRead = true;
       persist();
-    }, 500));
+    }, 500), { signal: scrollCtrl.signal });
   } else if (n.body_text) {
     const pre = document.createElement('pre');
     pre.className = 'reader-text';
