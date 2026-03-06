@@ -13,7 +13,7 @@
   --shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 
-[data-theme="dark"] {
+body.dark {
   --bg: #111110;
   --surface: #1c1c1b;
   --border: #2e2e2c;
@@ -230,7 +230,7 @@ button {
 }
 .mark-read-btn:hover { background: var(--muted); color: var(--surface); }
 .mark-read-btn.is-read { background: #dcfce7; color: #166534; }
-[data-theme="dark"] .mark-read-btn.is-read { background: #14532d; color: #86efac; }
+body.dark .mark-read-btn.is-read { background: #14532d; color: #86efac; }
 
 /* ── Login ── */
 .login-wrap {

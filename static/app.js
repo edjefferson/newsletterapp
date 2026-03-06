@@ -331,21 +331,26 @@ async function initLogin() {
 /* ── Dark mode ── */
 
 function applyTheme(dark) {
-  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+  document.body.classList.toggle("dark", dark);
   const btn = document.getElementById("theme-btn");
   if (btn) btn.textContent = dark ? "Light" : "Dark";
 }
 
 function initTheme() {
-  const saved = localStorage.getItem("theme");
-  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-  applyTheme(saved ? saved === "dark" : prefersDark);
+  let savedDark;
+  try {
+    const saved = localStorage.getItem("theme");
+    savedDark = saved ? saved === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+  } catch {
+    savedDark = false;
+  }
+  applyTheme(savedDark);
   const btn = document.getElementById("theme-btn");
   if (btn) {
     btn.addEventListener("click", () => {
-      const isDark = document.documentElement.getAttribute("data-theme") === "dark";
-      localStorage.setItem("theme", isDark ? "light" : "dark");
-      applyTheme(!isDark);
+      const nowDark = !document.body.classList.contains("dark");
+      try { localStorage.setItem("theme", nowDark ? "dark" : "light"); } catch {}
+      applyTheme(nowDark);
     });
   }
 }

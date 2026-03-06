@@ -12,11 +12,16 @@ async function setTheme(value) {
 }
 async function initTheme() {
   const saved = await getTheme();
-  const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  let dark;
+  try {
+    dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+  } catch {
+    dark = false;
+  }
   applyTheme(dark);
 }
 function applyTheme(dark) {
-  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  document.body.classList.toggle('dark', dark);
   const btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = dark ? 'Light' : 'Dark';
 }
@@ -137,9 +142,9 @@ export async function renderList(app) {
 
   await initTheme();
   document.getElementById('theme-btn').addEventListener('click', async () => {
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-    await setTheme(isDark ? 'light' : 'dark');
-    applyTheme(!isDark);
+    const nowDark = !document.body.classList.contains('dark');
+    await setTheme(nowDark ? 'dark' : 'light');
+    applyTheme(nowDark);
   });
 
   // Load local data immediately, then sync in background
