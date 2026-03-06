@@ -74,24 +74,6 @@ def list_newsletters(
     return result
 
 
-@router.get("/{newsletter_id}", response_model=NewsletterDetail)
-def get_newsletter(newsletter_id: int, db: Session = Depends(get_db)):
-    n = db.query(Newsletter).filter(Newsletter.id == newsletter_id).first()
-    if not n:
-        raise HTTPException(status_code=404, detail="Newsletter not found")
-    p = n.progress
-    return NewsletterDetail(
-        id=n.id,
-        subject=n.subject,
-        sender=n.sender,
-        received_at=n.received_at,
-        is_read=p.is_read if p else False,
-        scroll_position=p.scroll_position if p else 0,
-        body_html=n.body_html,
-        body_text=n.body_text,
-    )
-
-
 @router.get("/progress")
 def list_progress(
     since: Optional[datetime] = Query(None),
@@ -111,6 +93,24 @@ def list_progress(
         }
         for r in rows
     ]
+
+
+@router.get("/{newsletter_id}", response_model=NewsletterDetail)
+def get_newsletter(newsletter_id: int, db: Session = Depends(get_db)):
+    n = db.query(Newsletter).filter(Newsletter.id == newsletter_id).first()
+    if not n:
+        raise HTTPException(status_code=404, detail="Newsletter not found")
+    p = n.progress
+    return NewsletterDetail(
+        id=n.id,
+        subject=n.subject,
+        sender=n.sender,
+        received_at=n.received_at,
+        is_read=p.is_read if p else False,
+        scroll_position=p.scroll_position if p else 0,
+        body_html=n.body_html,
+        body_text=n.body_text,
+    )
 
 
 @router.post("/{newsletter_id}/progress")
