@@ -5,7 +5,7 @@ const OFFLINE_DAYS = 30;
 
 async function flushPendingProgress() {
   const pending = await getPendingProgress();
-  for (const row of pending) {
+  await Promise.all(pending.map(async row => {
     try {
       await apiFetch(`/api/newsletters/${row.server_id}/progress`, {
         method: 'POST',
@@ -15,7 +15,7 @@ async function flushPendingProgress() {
     } catch {
       // Still offline — leave dirty, will retry next sync
     }
-  }
+  }));
 }
 
 async function pullProgressUpdates() {
@@ -38,7 +38,7 @@ export async function syncFromServer(onProgress = null) {
   const sinceParam = since.toISOString();
 
   let page = 1;
-  const pageSize = 50;
+  const pageSize = 200;
   let total = 0;
 
   while (true) {
@@ -63,7 +63,7 @@ export async function syncFromServer(onProgress = null) {
     let unreadPage = 1;
     while (true) {
       const unread = await apiFetch(
-        `/api/newsletters?page=${unreadPage}&page_size=${pageSize}&unread=true`
+        `/api/newsletters?page=${unreadPage}&page_size=200&unread=true`
       );
       if (!unread.length) break;
       await upsertNewsletters(unread);

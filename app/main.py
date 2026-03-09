@@ -12,6 +12,8 @@ from fastapi.staticfiles import StaticFiles
 
 load_dotenv()
 
+from sqlalchemy import text
+
 from .database import Base, engine
 from .models import Newsletter, ReadingProgress  # noqa: F401 — ensure models are registered
 from .routes import login as login_router
@@ -27,6 +29,11 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
+    with engine.connect() as conn:
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_newsletters_received_at ON newsletters (received_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reading_progress_is_read ON reading_progress (is_read)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reading_progress_updated_at ON reading_progress (updated_at)"))
+        conn.commit()
     start_scheduler()
 
     # Run initial sync in background so startup doesn't block

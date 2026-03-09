@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, contains_eager
 
 from ..auth import require_auth
 from ..database import get_db
@@ -45,10 +45,14 @@ def list_newsletters(
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
 ):
-    q = db.query(Newsletter)
+    q = (
+        db.query(Newsletter)
+        .outerjoin(Newsletter.progress)
+        .options(contains_eager(Newsletter.progress))
+    )
     if unread is True:
         q = q.filter(
-            ~Newsletter.progress.has(ReadingProgress.is_read == True)
+            (ReadingProgress.is_read == None) | (ReadingProgress.is_read == False)
         )
     if after_id > 0:
         q = q.filter(Newsletter.id > after_id)
