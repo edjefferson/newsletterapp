@@ -56,6 +56,24 @@ export async function syncFromServer(onProgress = null) {
     page++;
   }
 
+  // Fetch all server-unread newsletters and upsert any missing from local DB.
+  // This catches unread items that predate the offline window or the initial install.
+  // We fetch summary only (no full=true) to avoid large payloads for old content.
+  try {
+    let unreadPage = 1;
+    while (true) {
+      const unread = await apiFetch(
+        `/api/newsletters?page=${unreadPage}&page_size=${pageSize}&unread=true`
+      );
+      if (!unread.length) break;
+      await upsertNewsletters(unread);
+      if (unread.length < pageSize) break;
+      unreadPage++;
+    }
+  } catch {
+    // Non-fatal — unread backfill will retry next sync
+  }
+
   // Pull server read states last so they overwrite anything set by upsertNewsletters
   await pullProgressUpdates();
 
