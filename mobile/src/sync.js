@@ -9,7 +9,7 @@ async function flushPendingProgress() {
     try {
       await apiFetch(`/api/newsletters/${row.server_id}/progress`, {
         method: 'POST',
-        body: JSON.stringify({ scroll_position: row.scroll_position, is_read: !!row.is_read }),
+        body: JSON.stringify({ scroll_position: Math.floor(row.scroll_position), is_read: !!row.is_read }),
       });
       await markProgressSynced(row.server_id);
     } catch {

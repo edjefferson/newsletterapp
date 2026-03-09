@@ -184,6 +184,9 @@ async function initIndex() {
 
   // Re-fetch if browser restores this page from bfcache (e.g. after back navigation from reader)
   window.addEventListener("pageshow", (e) => { if (e.persisted) loadList(); });
+
+  // Re-fetch when the tab regains focus (e.g. read something on mobile, switch back to web tab)
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadList(); });
 }
 
 /* ── Reader page ── */
@@ -263,7 +266,7 @@ async function initReader() {
       window.addEventListener(
         "scroll",
         debounce(() => {
-          scrollPos = window.scrollY;
+          scrollPos = Math.floor(window.scrollY);
           const atBottom =
             window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
           saveProgress(scrollPos, atBottom || isRead);
@@ -287,7 +290,7 @@ async function initReader() {
     try {
       await apiFetch(`/api/newsletters/${newsletterId}/progress`, {
         method: "POST",
-        body: JSON.stringify({ scroll_position: pos, is_read: read }),
+        body: JSON.stringify({ scroll_position: Math.floor(pos), is_read: read }),
       });
     } catch (_) { /* silent */ }
   }

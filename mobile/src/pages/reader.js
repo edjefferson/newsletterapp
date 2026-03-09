@@ -74,7 +74,7 @@ export async function renderReader(app, id) {
     try {
       await apiFetch(`/api/newsletters/${n.server_id}/progress`, {
         method: 'POST',
-        body: JSON.stringify({ scroll_position: scrollPos, is_read: isRead }),
+        body: JSON.stringify({ scroll_position: Math.floor(scrollPos), is_read: isRead }),
       });
       await markProgressSynced(n.server_id);
     } catch {
@@ -128,7 +128,7 @@ export async function renderReader(app, id) {
     if (scrollPos > 0) window.scrollTo(0, scrollPos);
 
     window.addEventListener('scroll', debounce(() => {
-      scrollPos = window.scrollY;
+      scrollPos = Math.floor(window.scrollY);
       const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
       if (atBottom) isRead = true;
       persist();
