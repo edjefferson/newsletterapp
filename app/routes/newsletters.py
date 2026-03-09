@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ..auth import require_auth
@@ -46,8 +47,8 @@ def list_newsletters(
 ):
     q = db.query(Newsletter)
     if unread is True:
-        q = q.outerjoin(ReadingProgress).filter(
-            (ReadingProgress.is_read == None) | (ReadingProgress.is_read == False)
+        q = q.filter(
+            ~Newsletter.progress.has(ReadingProgress.is_read == True)
         )
     if after_id > 0:
         q = q.filter(Newsletter.id > after_id)
@@ -72,6 +73,32 @@ def list_newsletters(
             )
         )
     return result
+
+
+@router.post("/mark-old-read")
+def mark_old_read(db: Session = Depends(get_db)):
+    """Mark all newsletters older than 7 days as read."""
+    cutoff = datetime.utcnow() - timedelta(days=7)
+    now = datetime.utcnow()
+
+    # Count how many will actually change (unread → read)
+    count = db.execute(text(
+        "SELECT COUNT(*) FROM newsletters n WHERE n.received_at < :cutoff "
+        "AND NOT EXISTS (SELECT 1 FROM reading_progress WHERE newsletter_id = n.id AND is_read = true)"
+    ), {"cutoff": cutoff}).scalar()
+
+    # Bulk upsert: insert or update progress for all old newsletters
+    db.execute(text(
+        "INSERT INTO reading_progress (newsletter_id, is_read, scroll_position, read_at, updated_at) "
+        "SELECT id, true, 0, :now, :now FROM newsletters WHERE received_at < :cutoff "
+        "ON CONFLICT (newsletter_id) DO UPDATE SET "
+        "is_read = true, "
+        "read_at = COALESCE(reading_progress.read_at, excluded.read_at), "
+        "updated_at = excluded.updated_at"
+    ), {"now": now, "cutoff": cutoff})
+
+    db.commit()
+    return {"ok": True, "marked": count}
 
 
 @router.get("/progress")

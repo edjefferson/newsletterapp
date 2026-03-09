@@ -119,6 +119,17 @@ export async function setSyncMeta(key, value) {
   await db.run('INSERT OR REPLACE INTO sync_meta (key, value) VALUES (?, ?)', [key, String(value)]);
 }
 
+export async function markOldNewslettersRead(days = 7) {
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  const result = await db.run(
+    `UPDATE newsletters SET is_read = 1, progress_dirty = 1
+     WHERE is_read = 0 AND received_at < ?`,
+    [cutoff.toISOString()]
+  );
+  return result.changes?.changes ?? 0;
+}
+
 // Clears body content from newsletters older than `days` unless keep_offline=1.
 // Keeps the row (subject/sender/date) so the list still shows them.
 export async function pruneOldContent(days = 30) {

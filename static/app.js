@@ -48,7 +48,7 @@ async function initIndex() {
   const syncBtn = document.getElementById("sync-btn");
   const filterBtns = document.querySelectorAll(".filter-btn");
 
-  let currentFilter = "all"; // "all" | "unread"
+  let currentFilter = "unread"; // "all" | "unread"
   const PAGE_SIZE = 50;
   let currentPage = 1;
   let hasMore = true;
@@ -164,6 +164,24 @@ async function initIndex() {
 
   await loadList();
 
+  initSettingsMenu(async (btn, panel) => {
+    btn.disabled = true;
+    btn.textContent = "Marking…";
+    try {
+      const result = await apiFetch("/api/newsletters/mark-old-read", { method: "POST" });
+      btn.textContent = `Marked ${result.marked} as read`;
+      setTimeout(() => {
+        btn.textContent = "Mark older than 1 week as read";
+        btn.disabled = false;
+        panel.classList.remove("open");
+      }, 2000);
+      await loadList();
+    } catch (err) {
+      btn.textContent = "Failed — try again";
+      btn.disabled = false;
+    }
+  });
+
   // Re-fetch if browser restores this page from bfcache (e.g. after back navigation from reader)
   window.addEventListener("pageshow", (e) => { if (e.persisted) loadList(); });
 }
@@ -213,13 +231,30 @@ async function initReader() {
       iframe.contentDocument.write(sanitizeHtml(n.body_html));
       iframe.contentDocument.close();
 
+      // Intercept link clicks so they open in a new tab instead of being swallowed by the sandbox
+      iframe.contentDocument.querySelectorAll('a[href]').forEach(a => {
+        a.addEventListener('click', e => {
+          const url = a.href;
+          if (url.startsWith('http')) {
+            e.preventDefault();
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        });
+      });
+
       // Auto-resize iframe to content height
       function resizeIframe() {
         const h = iframe.contentDocument.documentElement.scrollHeight;
         iframe.style.height = h + "px";
       }
       iframe.addEventListener("load", resizeIframe);
-      setTimeout(resizeIframe, 200); // fallback
+      setTimeout(() => {
+        resizeIframe();
+        // Short newsletters that fit without scrolling: mark as read immediately
+        if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
+          saveProgress(0, true);
+        }
+      }, 300);
 
       // Restore scroll on the outer window
       if (scrollPos > 0) window.scrollTo(0, scrollPos);
@@ -264,6 +299,13 @@ async function initReader() {
 
   markReadBtn.addEventListener("click", async () => {
     await saveProgress(scrollPos, !isRead);
+  });
+
+  document.getElementById("back-btn").addEventListener("click", async () => {
+    // Check atBottom in case debounce hasn't fired yet
+    const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
+    await saveProgress(scrollPos, isRead || atBottom);
+    history.length > 1 ? history.back() : (location.href = "/");
   });
 }
 
@@ -343,6 +385,28 @@ function applyTheme(dark) {
   document.body.classList.toggle("dark", dark);
   const btn = document.getElementById("theme-btn");
   if (btn) btn.textContent = dark ? "Light" : "Dark";
+}
+
+function initSettingsMenu(onMarkOldRead) {
+  const settingsBtn = document.getElementById("settings-btn");
+  const settingsPanel = document.getElementById("settings-panel");
+  if (!settingsBtn || !settingsPanel) return;
+
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    settingsPanel.classList.toggle("open");
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+      settingsPanel.classList.remove("open");
+    }
+  });
+
+  const markOldReadBtn = document.getElementById("mark-old-read-btn");
+  if (markOldReadBtn && onMarkOldRead) {
+    markOldReadBtn.addEventListener("click", () => onMarkOldRead(markOldReadBtn, settingsPanel));
+  }
 }
 
 function initTheme() {

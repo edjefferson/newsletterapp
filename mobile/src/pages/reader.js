@@ -103,11 +103,27 @@ export async function renderReader(app, id) {
     iframe.contentDocument.write(injectStyle(n.body_html));
     iframe.contentDocument.close();
 
+    // Intercept link clicks and open in system browser (Capacitor convention)
+    iframe.contentDocument.querySelectorAll('a[href]').forEach(a => {
+      a.addEventListener('click', e => {
+        e.preventDefault();
+        const url = a.href;
+        if (url && url.startsWith('http')) window.open(url, '_system');
+      });
+    });
+
     function resize() {
       iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
     }
     iframe.addEventListener('load', resize);
-    setTimeout(resize, 200);
+    setTimeout(() => {
+      resize();
+      // Short newsletters that fit without scrolling: mark as read immediately
+      if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
+        isRead = true;
+        persist();
+      }
+    }, 300);
 
     if (scrollPos > 0) window.scrollTo(0, scrollPos);
 

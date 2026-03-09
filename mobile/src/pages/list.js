@@ -1,7 +1,8 @@
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
-import { getNewsletters, getSyncMeta } from '../db.js';
+import { getNewsletters, getSyncMeta, markOldNewslettersRead } from '../db.js';
 import { syncFromServer } from '../sync.js';
+import { apiFetch } from '../api.js';
 
 async function getTheme() {
   const { value } = await Preferences.get({ key: 'theme' });
@@ -43,18 +44,29 @@ function esc(str) {
 }
 
 export async function renderList(app) {
+  const gearSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>`;
   app.innerHTML = `
     <header>
       <div class="container header-inner">
         <h1>Newsletters</h1>
-        <button class="theme-btn" id="theme-btn">Dark</button>
+        <div class="settings-menu-wrap">
+          <button class="settings-btn" id="settings-btn" aria-label="Settings">${gearSvg}</button>
+          <div class="settings-panel" id="settings-panel">
+            <div class="settings-row">
+              <span class="settings-row-label">Appearance</span>
+              <button class="theme-toggle-btn" id="theme-btn">Dark</button>
+            </div>
+            <div class="settings-divider"></div>
+            <button class="settings-action-btn" id="mark-old-read-btn">Mark older than 1 week as read</button>
+          </div>
+        </div>
         <button class="btn-primary" id="sync-btn">Sync</button>
       </div>
     </header>
     <main class="container">
       <div class="filter-bar">
-        <button class="filter-btn active" data-filter="all">All</button>
-        <button class="filter-btn" data-filter="unread">Unread</button>
+        <button class="filter-btn active" data-filter="unread">Unread</button>
+        <button class="filter-btn" data-filter="all">All</button>
       </div>
       <div class="status-bar" id="status"></div>
       <ul class="list" id="list"></ul>
@@ -66,7 +78,7 @@ export async function renderList(app) {
   const syncBtn = document.getElementById('sync-btn');
   const filterBtns = document.querySelectorAll('.filter-btn');
 
-  let filter = 'all';
+  let filter = 'unread';
   let page = 1;
   let hasMore = true;
   let loading = false;
@@ -145,6 +157,41 @@ export async function renderList(app) {
     const nowDark = !document.body.classList.contains('dark');
     await setTheme(nowDark ? 'dark' : 'light');
     applyTheme(nowDark);
+  });
+
+  // Settings panel
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  settingsBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    settingsPanel.classList.toggle('open');
+  });
+  document.addEventListener('click', (e) => {
+    if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
+      settingsPanel.classList.remove('open');
+    }
+  });
+
+  const markOldReadBtn = document.getElementById('mark-old-read-btn');
+  markOldReadBtn.addEventListener('click', async () => {
+    markOldReadBtn.disabled = true;
+    markOldReadBtn.textContent = 'Marking…';
+    try {
+      const localCount = await markOldNewslettersRead(7);
+      // Flush to server in background (best effort)
+      try { await apiFetch('/api/newsletters/mark-old-read', { method: 'POST' }); } catch {}
+      markOldReadBtn.textContent = `Marked ${localCount} as read`;
+      setTimeout(() => {
+        markOldReadBtn.textContent = 'Mark older than 1 week as read';
+        markOldReadBtn.disabled = false;
+        settingsPanel.classList.remove('open');
+      }, 2000);
+      page = 1; hasMore = true;
+      await loadPage(1);
+    } catch (err) {
+      markOldReadBtn.textContent = 'Failed — try again';
+      markOldReadBtn.disabled = false;
+    }
   });
 
   // Load local data immediately, then sync in background
