@@ -1,5 +1,6 @@
 import { getNewsletter, saveProgress, markProgressSynced } from '../db.js';
 import { apiFetch } from '../api.js';
+import { App } from '@capacitor/app';
 
 function debounce(fn, ms) {
   let t;
@@ -82,10 +83,20 @@ export async function renderReader(app, id) {
     }
   }
 
-  document.getElementById('back-btn').addEventListener('click', async () => {
+  async function goBack() {
     scrollCtrl.abort();
     await persist();
     window.location.hash = '#/';
+  }
+
+  document.getElementById('back-btn').addEventListener('click', async () => {
+    backHandle.remove();
+    await goBack();
+  });
+
+  const backHandle = await App.addListener('backButton', async () => {
+    backHandle.remove();
+    await goBack();
   });
 
   markReadBtn.addEventListener('click', async () => {
@@ -118,14 +129,13 @@ export async function renderReader(app, id) {
     iframe.addEventListener('load', resize);
     setTimeout(() => {
       resize();
+      if (scrollPos > 0) window.scrollTo(0, scrollPos);
       // Short newsletters that fit without scrolling: mark as read immediately
       if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
         isRead = true;
         persist();
       }
     }, 300);
-
-    if (scrollPos > 0) window.scrollTo(0, scrollPos);
 
     window.addEventListener('scroll', debounce(() => {
       scrollPos = Math.floor(window.scrollY);

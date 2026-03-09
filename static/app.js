@@ -253,14 +253,12 @@ async function initReader() {
       iframe.addEventListener("load", resizeIframe);
       setTimeout(() => {
         resizeIframe();
+        if (scrollPos > 0) window.scrollTo(0, scrollPos);
         // Short newsletters that fit without scrolling: mark as read immediately
         if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
           saveProgress(0, true);
         }
       }, 300);
-
-      // Restore scroll on the outer window
-      if (scrollPos > 0) window.scrollTo(0, scrollPos);
 
       // Track scroll on outer window
       window.addEventListener(
