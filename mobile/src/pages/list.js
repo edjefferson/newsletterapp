@@ -194,6 +194,48 @@ export async function renderList(app) {
     }
   });
 
+  // Pull-to-refresh
+  const ptr = document.createElement('div');
+  ptr.className = 'ptr-indicator';
+  ptr.innerHTML = '<div class="ptr-spinner"></div><span class="ptr-label">Pull to refresh</span>';
+  document.body.prepend(ptr);
+  const ptrLabel = ptr.querySelector('.ptr-label');
+
+  let ptrStartY = 0;
+  let ptrActive = false;
+  const PTR_THRESHOLD = 72;
+
+  document.addEventListener('touchstart', e => {
+    if (window.scrollY === 0) ptrStartY = e.touches[0].clientY;
+    else ptrStartY = 0;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!ptrStartY) return;
+    const dy = Math.min(e.touches[0].clientY - ptrStartY, PTR_THRESHOLD * 1.5);
+    if (dy <= 0) { ptrStartY = 0; return; }
+    const h = Math.min(dy * 0.5, PTR_THRESHOLD);
+    ptr.style.height = h + 'px';
+    ptrActive = h >= PTR_THRESHOLD * 0.9;
+    ptr.classList.toggle('ptr-ready', ptrActive);
+    ptrLabel.textContent = ptrActive ? 'Release to refresh' : 'Pull to refresh';
+  }, { passive: true });
+
+  document.addEventListener('touchend', async () => {
+    if (!ptrStartY) return;
+    ptrStartY = 0;
+    if (ptrActive) {
+      ptrActive = false;
+      ptr.classList.remove('ptr-ready');
+      ptr.classList.add('ptr-loading');
+      ptrLabel.textContent = 'Refreshing…';
+      await doSync();
+      ptr.classList.remove('ptr-loading');
+    }
+    ptr.style.height = '0';
+    ptrLabel.textContent = 'Pull to refresh';
+  });
+
   // Load local data immediately, then sync in background
   await loadPage(1);
   const lastSync = await getSyncMeta('last_sync');
