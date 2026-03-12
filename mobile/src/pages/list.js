@@ -103,13 +103,14 @@ export async function renderList(app) {
       items.forEach(n => {
         const li = document.createElement('li');
         li.className = `list-item${n.is_read ? ' read' : ''}`;
+        const isFuture = new Date(n.received_at) > new Date();
         li.innerHTML = `
           <span class="unread-dot${n.is_read ? ' hidden' : n.scroll_position > 0 ? ' in-progress' : ''}"></span>
           <span class="list-item-body">
             <span class="list-item-subject">${esc(n.subject)}</span>
             <span class="list-item-sender">${esc(n.sender)}</span>
           </span>
-          <span class="list-item-date">${formatDate(n.received_at)}</span>`;
+          <span class="list-item-date${isFuture ? ' future' : ''}">${formatDate(n.received_at)}</span>`;
         li.addEventListener('click', () => {
           li.classList.add('read');
           li.querySelector('.unread-dot')?.classList.add('hidden');

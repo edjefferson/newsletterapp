@@ -179,8 +179,8 @@ body.dark .settings-panel { box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 .list-item:hover { border-color: var(--muted); box-shadow: var(--shadow); }
 
 .unread-dot {
-  width: 8px;
-  height: 8px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--unread-dot);
   margin-top: 6px;
@@ -213,6 +213,7 @@ body.dark .settings-panel { box-shadow: 0 4px 16px rgba(0,0,0,.4); }
   white-space: nowrap;
 }
 .list-item-date { font-size: .75rem; color: var(--muted); white-space: nowrap; margin-top: 2px; }
+.list-item-date.future { color: var(--accent); font-style: italic; }
 
 .read .list-item-subject { font-weight: 400; color: var(--muted); }
 
