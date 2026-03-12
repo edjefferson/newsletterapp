@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from .database import Base, engine
 from .models import Newsletter, ReadingProgress  # noqa: F401 — ensure models are registered
+from .routes import articles as articles_router
 from .routes import login as login_router
 from .routes import newsletters as newsletters_router
 from .routes import sync as sync_router
@@ -33,6 +34,15 @@ async def lifespan(app: FastAPI):
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_newsletters_received_at ON newsletters (received_at)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reading_progress_is_read ON reading_progress (is_read)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_reading_progress_updated_at ON reading_progress (updated_at)"))
+        for migration in [
+            "ALTER TABLE newsletters ADD COLUMN subtitle TEXT",
+            "ALTER TABLE newsletters ADD COLUMN source TEXT NOT NULL DEFAULT 'imap'",
+            "ALTER TABLE newsletters ADD COLUMN author TEXT",
+        ]:
+            try:
+                conn.execute(text(migration))
+            except Exception:
+                pass  # column already exists
         conn.commit()
     start_scheduler()
 
@@ -54,6 +64,7 @@ app.add_middleware(
         "http://localhost",
         "https://localhost",
         "http://localhost:5173",  # Vite dev server
+        "http://localhost:3000",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -63,6 +74,7 @@ app.add_middleware(
 app.include_router(login_router.router)
 app.include_router(newsletters_router.router)
 app.include_router(sync_router.router)
+app.include_router(articles_router.router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

@@ -14,11 +14,14 @@ class Newsletter(Base):
     id = Column(Integer, primary_key=True, index=True)
     imap_uid = Column(Text, unique=True, nullable=False)
     subject = Column(Text, nullable=False, default="(no subject)")
+    subtitle = Column(Text, nullable=True)
     sender = Column(Text, nullable=False, default="")
+    author = Column(Text, nullable=True)
     received_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
     body_html = Column(Text, nullable=True)
     body_text = Column(Text, nullable=True)
     synced_at = Column(DateTime, nullable=False, default=_utcnow)
+    source = Column(Text, nullable=False, default="imap")
 
     progress = relationship("ReadingProgress", back_populates="newsletter", uselist=False, cascade="all, delete-orphan")
 

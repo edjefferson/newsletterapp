@@ -25,9 +25,18 @@ def make_token() -> str:
 
 
 def require_auth(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)):
-    if credentials is None or credentials.credentials != _expected_token():
+    if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    token = credentials.credentials
+    api_key = os.environ.get("API_KEY", "")
+    if token == _expected_token() or (api_key and token == api_key):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or missing token",
+        headers={"WWW-Authenticate": "Bearer"},
+    )

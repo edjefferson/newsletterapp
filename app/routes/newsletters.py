@@ -20,10 +20,13 @@ router = APIRouter(prefix="/api/newsletters", tags=["newsletters"], dependencies
 class NewsletterSummary(BaseModel):
     id: int
     subject: str
+    subtitle: Optional[str]
     sender: str
+    author: Optional[str]
     received_at: datetime
     is_read: bool
     scroll_position: int
+    source: str
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,10 +74,13 @@ def list_newsletters(
             NewsletterDetail(
                 id=n.id,
                 subject=n.subject,
+                subtitle=n.subtitle,
                 sender=n.sender,
+                author=n.author,
                 received_at=n.received_at,
                 is_read=p.is_read if p else False,
                 scroll_position=p.scroll_position if p else 0,
+                source=n.source,
                 body_html=n.body_html if full else None,
                 body_text=n.body_text if full else None,
             )
@@ -138,10 +144,13 @@ def get_newsletter(newsletter_id: int, db: Session = Depends(get_db)):
     return NewsletterDetail(
         id=n.id,
         subject=n.subject,
+        subtitle=n.subtitle,
         sender=n.sender,
+        author=n.author,
         received_at=n.received_at,
         is_read=p.is_read if p else False,
         scroll_position=p.scroll_position if p else 0,
+        source=n.source,
         body_html=n.body_html,
         body_text=n.body_text,
     )
