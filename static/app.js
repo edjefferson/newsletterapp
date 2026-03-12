@@ -66,7 +66,11 @@ async function initIndex() {
         <span class="list-item-sender">${escHtml(n.sender)}</span>
       </span>
       <span class="list-item-date">${formatDate(n.received_at)}</span>`;
-    li.addEventListener("click", () => { window.location.href = `/reader/${n.id}`; });
+    li.addEventListener("click", () => {
+      li.classList.add("read");
+      li.querySelector(".unread-dot")?.classList.add("hidden");
+      window.location.href = `/reader/${n.id}`;
+    });
     return li;
   }
 

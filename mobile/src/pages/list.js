@@ -110,7 +110,11 @@ export async function renderList(app) {
             <span class="list-item-sender">${esc(n.sender)}</span>
           </span>
           <span class="list-item-date">${formatDate(n.received_at)}</span>`;
-        li.addEventListener('click', () => { window.location.hash = `#/reader/${n.id}`; });
+        li.addEventListener('click', () => {
+          li.classList.add('read');
+          li.querySelector('.unread-dot')?.classList.add('hidden');
+          window.location.hash = `#/reader/${n.id}`;
+        });
         listEl.appendChild(li);
       });
       hasMore = items.length === PAGE_SIZE;
