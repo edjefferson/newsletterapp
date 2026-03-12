@@ -57,15 +57,19 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Newsletter Reader", lifespan=lifespan)
 
+_base_origins = [
+    "capacitor://localhost",
+    "http://localhost",
+    "https://localhost",
+    "http://localhost:5173",  # Vite dev server
+    "http://localhost:3000",
+]
+_extra = os.environ.get("CORS_ORIGINS", "")
+_allowed_origins = _base_origins + [o.strip() for o in _extra.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "capacitor://localhost",
-        "http://localhost",
-        "https://localhost",
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:3000",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
