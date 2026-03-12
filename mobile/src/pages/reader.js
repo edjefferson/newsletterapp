@@ -110,6 +110,7 @@ export async function renderReader(app, id) {
     iframe.className = 'reader-frame';
     iframe.sandbox = 'allow-same-origin';
     iframe.scrolling = 'no';
+    frameWrap.style.opacity = '0';
     frameWrap.appendChild(iframe);
     iframe.contentDocument.open();
     iframe.contentDocument.write(injectStyle(n.body_html));
@@ -128,15 +129,18 @@ export async function renderReader(app, id) {
       iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
     }
     iframe.addEventListener('load', resize);
-    setTimeout(() => {
+
+    resize();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
       resize();
       if (scrollPos > 0) window.scrollTo(0, scrollPos);
+      frameWrap.style.opacity = '';
       // Short newsletters that fit without scrolling: mark as read immediately
       if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
         isRead = true;
         persist();
       }
-    }, 300);
+    }));
 
     window.addEventListener('scroll', debounce(() => {
       scrollPos = Math.floor(window.scrollY);
@@ -148,8 +152,12 @@ export async function renderReader(app, id) {
     const pre = document.createElement('pre');
     pre.className = 'reader-text';
     pre.textContent = n.body_text;
+    frameWrap.style.opacity = '0';
     frameWrap.appendChild(pre);
-    if (scrollPos > 0) window.scrollTo(0, scrollPos);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (scrollPos > 0) window.scrollTo(0, scrollPos);
+      frameWrap.style.opacity = '';
+    }));
     window.addEventListener('scroll', debounce(() => {
       scrollPos = Math.floor(window.scrollY);
       const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
