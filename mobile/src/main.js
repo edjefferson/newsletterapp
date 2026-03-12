@@ -28,7 +28,7 @@ async function route() {
   // Remove any stale scroll listeners from previous page
   window.onscroll = null;
 
-  // Hide instantly while we swap content (each render fn sets app.innerHTML synchronously)
+  // Hide instantly while we swap content
   app.style.transition = 'none';
   app.style.opacity = '0';
 
@@ -36,13 +36,17 @@ async function route() {
     renderLogin(app);
   } else if (hash === '#/') {
     renderList(app).catch(console.error);
-    activeBackHandle = await App.addListener('backButton', () => App.exitApp());
+    // Set up back button without blocking the fade-in
+    App.addListener('backButton', () => App.exitApp())
+      .then(h => { activeBackHandle = h; })
+      .catch(console.error);
   } else if (hash.startsWith('#/reader/')) {
     const id = hash.split('/').pop();
-    renderReader(app, id).catch(console.error);
+    // Await so content + scroll position are set before we fade in
+    await renderReader(app, id).catch(console.error);
   }
 
-  // Fade in after the new skeleton has been painted
+  // Fade in after content is ready
   requestAnimationFrame(() => {
     app.style.transition = 'opacity 0.18s ease';
     requestAnimationFrame(() => {

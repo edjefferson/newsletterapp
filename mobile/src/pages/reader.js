@@ -110,7 +110,6 @@ export async function renderReader(app, id) {
     iframe.className = 'reader-frame';
     iframe.sandbox = 'allow-same-origin';
     iframe.scrolling = 'no';
-    frameWrap.style.opacity = '0';
     frameWrap.appendChild(iframe);
     iframe.contentDocument.open();
     iframe.contentDocument.write(injectStyle(n.body_html));
@@ -128,19 +127,18 @@ export async function renderReader(app, id) {
     function resize() {
       iframe.style.height = iframe.contentDocument.documentElement.scrollHeight + 'px';
     }
+    // Re-resize when images/resources finish loading
     iframe.addEventListener('load', resize);
 
+    // Resize and restore scroll now — router keeps app hidden until we return,
+    // so the user never sees the jump
     resize();
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      resize();
-      if (scrollPos > 0) window.scrollTo(0, scrollPos);
-      frameWrap.style.opacity = '';
-      // Short newsletters that fit without scrolling: mark as read immediately
-      if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
-        isRead = true;
-        persist();
-      }
-    }));
+    if (scrollPos > 0) window.scrollTo(0, scrollPos);
+    // Short newsletters that fit without scrolling: mark as read immediately
+    if (!isRead && window.scrollY + window.innerHeight >= document.body.scrollHeight - 50) {
+      isRead = true;
+      persist();
+    }
 
     window.addEventListener('scroll', debounce(() => {
       scrollPos = Math.floor(window.scrollY);
@@ -152,12 +150,8 @@ export async function renderReader(app, id) {
     const pre = document.createElement('pre');
     pre.className = 'reader-text';
     pre.textContent = n.body_text;
-    frameWrap.style.opacity = '0';
     frameWrap.appendChild(pre);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      if (scrollPos > 0) window.scrollTo(0, scrollPos);
-      frameWrap.style.opacity = '';
-    }));
+    if (scrollPos > 0) window.scrollTo(0, scrollPos);
     window.addEventListener('scroll', debounce(() => {
       scrollPos = Math.floor(window.scrollY);
       const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
