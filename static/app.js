@@ -55,6 +55,18 @@ async function initIndex() {
   let currentPage = 1;
   let hasMore = true;
   let loading = false;
+  const CACHE_KEY = "nl_list_cache";
+
+  // Render cached items instantly so back-navigation feels immediate
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "[]");
+    if (cached.length > 0) {
+      const frag = document.createDocumentFragment();
+      cached.forEach((n) => frag.appendChild(renderItem(n)));
+      listEl.appendChild(frag);
+      statusEl.textContent = `${cached.length} newsletters`;
+    }
+  } catch (_) {}
 
   function renderItem(n) {
     const li = document.createElement("li");
@@ -88,13 +100,19 @@ async function initIndex() {
       if (page === 1) {
         listEl.innerHTML = "";
         if (newsletters.length === 0) {
+          sessionStorage.removeItem(CACHE_KEY);
           listEl.innerHTML = `<li class="empty">No newsletters yet. Press Sync to fetch from Gmail.</li>`;
           hasMore = false;
           statusEl.textContent = "";
           return;
         }
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(newsletters)); } catch (_) {}
+        const fragment = document.createDocumentFragment();
+        newsletters.forEach((n) => fragment.appendChild(renderItem(n)));
+        listEl.appendChild(fragment);
+      } else {
+        newsletters.forEach((n) => listEl.appendChild(renderItem(n)));
       }
-      newsletters.forEach((n) => listEl.appendChild(renderItem(n)));
       hasMore = newsletters.length === PAGE_SIZE;
       currentPage = page;
       statusEl.textContent = `${listEl.querySelectorAll(".list-item").length} newsletters${hasMore ? "+" : ""}`;
@@ -124,6 +142,8 @@ async function initIndex() {
       filterBtns.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentFilter = btn.dataset.filter;
+      sessionStorage.removeItem(CACHE_KEY);
+      listEl.innerHTML = "";
       loadList();
     });
   });
