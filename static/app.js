@@ -55,11 +55,11 @@ async function initIndex() {
   let currentPage = 1;
   let hasMore = true;
   let loading = false;
-  const CACHE_KEY = "nl_list_cache";
+  const cacheKey = () => `nl_list_cache_${currentFilter}`;
 
   // Render cached items instantly so back-navigation feels immediate
   try {
-    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "[]");
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey()) || "[]");
     if (cached.length > 0) {
       const frag = document.createDocumentFragment();
       cached.forEach((n) => frag.appendChild(renderItem(n)));
@@ -100,13 +100,13 @@ async function initIndex() {
       if (page === 1) {
         listEl.innerHTML = "";
         if (newsletters.length === 0) {
-          sessionStorage.removeItem(CACHE_KEY);
+          sessionStorage.removeItem(cacheKey());
           listEl.innerHTML = `<li class="empty">No newsletters yet. Press Sync to fetch from Gmail.</li>`;
           hasMore = false;
           statusEl.textContent = "";
           return;
         }
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(newsletters)); } catch (_) {}
+        try { sessionStorage.setItem(cacheKey(), JSON.stringify(newsletters)); } catch (_) {}
         const fragment = document.createDocumentFragment();
         newsletters.forEach((n) => fragment.appendChild(renderItem(n)));
         listEl.appendChild(fragment);
@@ -142,7 +142,7 @@ async function initIndex() {
       filterBtns.forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
       currentFilter = btn.dataset.filter;
-      sessionStorage.removeItem(CACHE_KEY);
+      sessionStorage.removeItem(cacheKey());
       listEl.innerHTML = "";
       loadList();
     });

@@ -86,7 +86,7 @@ export async function renderList(app) {
   let hasMore = true;
   let loading = false;
   const PAGE_SIZE = 50;
-  const CACHE_KEY = 'nl_list_cache';
+  const cacheKey = () => `nl_list_cache_${filter}`;
 
   function renderItem(n) {
     const li = document.createElement('li');
@@ -109,7 +109,7 @@ export async function renderList(app) {
 
   // Render cached items instantly so back-navigation feels immediate
   try {
-    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || '[]');
+    const cached = JSON.parse(sessionStorage.getItem(cacheKey()) || '[]');
     if (cached.length > 0) {
       const frag = document.createDocumentFragment();
       cached.forEach(n => frag.appendChild(renderItem(n)));
@@ -124,15 +124,16 @@ export async function renderList(app) {
     try {
       const items = await getNewsletters({ unread: filter === 'unread', page: p, pageSize: PAGE_SIZE });
       if (p === 1) {
+        window.scrollTo(0, 0);
         listEl.innerHTML = '';
         if (!items.length) {
-          sessionStorage.removeItem(CACHE_KEY);
+          sessionStorage.removeItem(cacheKey());
           listEl.innerHTML = '<li class="empty">No newsletters. Tap Sync to fetch.</li>';
           statusEl.textContent = '';
           hasMore = false;
           return;
         }
-        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(items)); } catch (_) {}
+        try { sessionStorage.setItem(cacheKey(), JSON.stringify(items)); } catch (_) {}
         const frag = document.createDocumentFragment();
         items.forEach(n => frag.appendChild(renderItem(n)));
         listEl.appendChild(frag);
@@ -152,7 +153,7 @@ export async function renderList(app) {
     filterBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     filter = btn.dataset.filter;
-    sessionStorage.removeItem(CACHE_KEY);
+    sessionStorage.removeItem(cacheKey());
     listEl.innerHTML = '';
     page = 1; hasMore = true;
     loadPage(1);
