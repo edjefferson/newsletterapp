@@ -33,7 +33,8 @@ function formatDate(iso) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const days = Math.round((today - msgDay) / 86400000);
-  if (days <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (days < 0) return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  if (days === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (days === 1) return 'Yesterday';
   if (days < 7) return d.toLocaleDateString([], { weekday: 'short' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
