@@ -38,16 +38,21 @@ export function renderLogin(app) {
     pwToggle.setAttribute('aria-label', visible ? 'Show password' : 'Hide password');
   });
 
+  const submitBtn = document.querySelector('#login-form button[type="submit"]');
   document.getElementById('login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const errorEl = document.getElementById('login-error');
     errorEl.textContent = '';
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing in…';
     const password = pwInput.value;
     try {
       await login(password);
       window.location.hash = '#/';
     } catch (err) {
       errorEl.textContent = err.message || 'Login failed.';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Sign in';
     }
   });
 }

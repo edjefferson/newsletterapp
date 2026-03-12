@@ -3,7 +3,11 @@ import imaplib
 import logging
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from email.header import decode_header, make_header
 
 from bs4 import BeautifulSoup
@@ -69,10 +73,14 @@ def _get_body(msg) -> tuple[str | None, str | None]:
 
 
 def _strip_dangerous_tags(html: str) -> str:
-    """Remove script/form elements but keep layout intact."""
+    """Remove script/form elements and inline event handlers."""
     soup = BeautifulSoup(html, "html.parser")
     for tag in soup.find_all(["script", "form", "input", "button"]):
         tag.decompose()
+    for tag in soup.find_all(True):
+        for attr in list(tag.attrs):
+            if attr.lower().startswith("on"):
+                del tag[attr]
     return str(soup)
 
 
@@ -86,12 +94,18 @@ def sync_newsletters() -> int:
     logger.info("Sync starting — user=%s host=%s:%s folder=%s timeout=%ss",
                 cfg["user"], cfg["host"], cfg["port"], cfg["folder"], IMAP_TIMEOUT)
 
-    db: Session = SessionLocal()
     inserted = 0
+    db: Session = SessionLocal()
     try:
         logger.info("Connecting to %s:%s …", cfg["host"], cfg["port"])
         imaplib.IMAP4_SSL.ssl_context = None  # use default
-        imap_conn = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
+        import socket
+        old_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(IMAP_TIMEOUT)
+        try:
+            imap_conn = imaplib.IMAP4_SSL(cfg["host"], cfg["port"])
+        finally:
+            socket.setdefaulttimeout(old_timeout)
         imap_conn.sock.settimeout(IMAP_TIMEOUT)
         logger.info("SSL connection established. Logging in …")
 
@@ -150,8 +164,12 @@ def sync_newsletters() -> int:
                         date_str = msg.get("Date", "")
                         try:
                             received_at = email.utils.parsedate_to_datetime(date_str)
+                            # Normalise to naive UTC so all rows are consistent
+                            if received_at.tzinfo is not None:
+                                from datetime import timezone
+                                received_at = received_at.astimezone(timezone.utc).replace(tzinfo=None)
                         except Exception:
-                            received_at = datetime.utcnow()
+                            received_at = _utcnow()
 
                         html_body, text_body = _get_body(msg)
                         if html_body:
@@ -166,7 +184,7 @@ def sync_newsletters() -> int:
                             received_at=received_at,
                             body_html=html_body,
                             body_text=text_body,
-                            synced_at=datetime.utcnow(),
+                            synced_at=_utcnow(),
                         )
                         db.add(newsletter)
                         inserted += 1

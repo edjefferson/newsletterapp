@@ -33,6 +33,7 @@ export async function renderReader(app, id) {
   const n = await getNewsletter(parseInt(id));
   if (!n) {
     app.innerHTML = '<p class="empty" style="padding:32px">Newsletter not found.</p>';
+    const h = await App.addListener('backButton', () => { h.remove(); window.location.hash = '#/'; });
     return;
   }
 
@@ -89,12 +90,12 @@ export async function renderReader(app, id) {
     window.location.hash = '#/';
   }
 
-  document.getElementById('back-btn').addEventListener('click', async () => {
+  const backHandle = await App.addListener('backButton', async () => {
     backHandle.remove();
     await goBack();
   });
 
-  const backHandle = await App.addListener('backButton', async () => {
+  document.getElementById('back-btn').addEventListener('click', async () => {
     backHandle.remove();
     await goBack();
   });
@@ -148,6 +149,13 @@ export async function renderReader(app, id) {
     pre.className = 'reader-text';
     pre.textContent = n.body_text;
     frameWrap.appendChild(pre);
+    if (scrollPos > 0) window.scrollTo(0, scrollPos);
+    window.addEventListener('scroll', debounce(() => {
+      scrollPos = Math.floor(window.scrollY);
+      const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
+      if (atBottom) isRead = true;
+      persist();
+    }, 500), { signal: scrollCtrl.signal });
   } else {
     frameWrap.innerHTML = '<p class="empty" style="padding:24px">No content cached yet. Open when online to download.</p>';
   }

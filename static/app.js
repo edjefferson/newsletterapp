@@ -32,8 +32,9 @@ async function apiFetch(path, options = {}) {
 function formatDate(isoString) {
   const d = new Date(isoString);
   const now = new Date();
-  const diff = now - d;
-  const days = Math.floor(diff / 86400000);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((today - msgDay) / 86400000);
   if (days === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (days === 1) return "Yesterday";
   if (days < 7) return d.toLocaleDateString([], { weekday: "short" });
@@ -275,6 +276,12 @@ async function initReader() {
       pre.className = "reader-text";
       pre.textContent = n.body_text;
       frameWrap.appendChild(pre);
+      if (scrollPos > 0) window.scrollTo(0, scrollPos);
+      window.addEventListener("scroll", debounce(() => {
+        scrollPos = Math.floor(window.scrollY);
+        const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
+        saveProgress(scrollPos, atBottom || isRead);
+      }, 500));
     } else {
       frameWrap.innerHTML = `<p class="empty">No content available.</p>`;
     }

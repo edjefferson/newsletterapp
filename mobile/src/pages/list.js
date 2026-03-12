@@ -29,8 +29,10 @@ function applyTheme(dark) {
 
 function formatDate(iso) {
   const d = new Date(iso);
-  const diff = Date.now() - d;
-  const days = Math.floor(diff / 86400000);
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const days = Math.round((today - msgDay) / 86400000);
   if (days === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (days === 1) return 'Yesterday';
   if (days < 7) return d.toLocaleDateString([], { weekday: 'short' });
@@ -128,14 +130,20 @@ export async function renderList(app) {
     loadPage(1);
   }));
 
+  const listCtrl = new AbortController();
+  const { signal } = listCtrl;
+
   window.addEventListener('scroll', () => {
     if (!hasMore || loading) return;
     if (window.scrollY + window.innerHeight >= document.body.scrollHeight - 200) loadPage(page + 1);
-  });
+  }, { signal });
 
+  let syncing = false;
   async function doSync() {
+    if (syncing) return;
+    syncing = true;
     const net = await Network.getStatus();
-    if (!net.connected) { statusEl.textContent = 'Offline — showing cached newsletters.'; return; }
+    if (!net.connected) { statusEl.textContent = 'Offline — showing cached newsletters.'; syncing = false; return; }
     syncBtn.disabled = true;
     syncBtn.innerHTML = '<span class="spinner"></span>Syncing…';
     try {
@@ -145,6 +153,7 @@ export async function renderList(app) {
     } catch (err) {
       statusEl.textContent = `Sync failed: ${err.message}`;
     } finally {
+      syncing = false;
       syncBtn.disabled = false;
       syncBtn.textContent = 'Sync';
     }
@@ -170,7 +179,7 @@ export async function renderList(app) {
     if (!settingsPanel.contains(e.target) && e.target !== settingsBtn) {
       settingsPanel.classList.remove('open');
     }
-  });
+  }, { signal });
 
   const markOldReadBtn = document.getElementById('mark-old-read-btn');
   markOldReadBtn.addEventListener('click', async () => {
@@ -208,7 +217,7 @@ export async function renderList(app) {
   document.addEventListener('touchstart', e => {
     if (window.scrollY === 0) ptrStartY = e.touches[0].clientY;
     else ptrStartY = 0;
-  }, { passive: true });
+  }, { passive: true, signal });
 
   document.addEventListener('touchmove', e => {
     if (!ptrStartY) return;
@@ -219,7 +228,7 @@ export async function renderList(app) {
     ptrActive = h >= PTR_THRESHOLD * 0.9;
     ptr.classList.toggle('ptr-ready', ptrActive);
     ptrLabel.textContent = ptrActive ? 'Release to refresh' : 'Pull to refresh';
-  }, { passive: true });
+  }, { passive: true, signal });
 
   document.addEventListener('touchend', async () => {
     if (!ptrStartY) return;
@@ -234,7 +243,13 @@ export async function renderList(app) {
     }
     ptr.style.height = '0';
     ptrLabel.textContent = 'Pull to refresh';
-  });
+  }, { signal });
+
+  // Abort all document listeners and remove PTR element when navigating away
+  window.addEventListener('hashchange', () => {
+    listCtrl.abort();
+    ptr.remove();
+  }, { once: true });
 
   // Load local data immediately, then sync in background
   await loadPage(1);

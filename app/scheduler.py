@@ -8,14 +8,10 @@ scheduler = AsyncIOScheduler()
 
 
 def start_scheduler():
-    from .imap_sync import sync_newsletters
+    from .routes.sync import run_sync_background
 
     def run_sync():
-        try:
-            count = sync_newsletters()
-            logger.info("Scheduled sync: %d new newsletters.", count)
-        except Exception as exc:
-            logger.exception("Scheduled sync error: %s", exc)
+        run_sync_background()
 
     scheduler.add_job(
         run_sync,

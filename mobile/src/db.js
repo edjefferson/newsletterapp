@@ -49,12 +49,12 @@ export async function upsertNewsletters(newsletters) {
       body_text   = COALESCE(excluded.body_text, newsletters.body_text),
       is_read     = CASE WHEN newsletters.progress_dirty = 1 THEN newsletters.is_read ELSE excluded.is_read END
   `;
-  await db.executeSet({
-    set: newsletters.map(n => ({
+  await db.executeSet(
+    newsletters.map(n => ({
       statement,
       values: [n.id, n.subject, n.sender, n.received_at, n.body_html || null, n.body_text || null, n.is_read ? 1 : 0],
-    })),
-  });
+    }))
+  );
 }
 
 export async function getNewsletters({ unread = false, page = 1, pageSize = 50 } = {}) {
@@ -93,13 +93,12 @@ export async function markProgressSynced(serverId) {
 export async function applyServerProgress(updates) {
   if (!updates.length) return;
   // Only overwrite if not dirty (local unsynced change takes priority)
-  await db.executeSet({
-    set: updates.map(u => ({
-      statement: `UPDATE newsletters SET is_read = ?, scroll_position = ?
-                  WHERE server_id = ? AND progress_dirty = 0`,
+  await db.executeSet(
+    updates.map(u => ({
+      statement: `UPDATE newsletters SET is_read = ?, scroll_position = ? WHERE server_id = ? AND progress_dirty = 0`,
       values: [u.is_read ? 1 : 0, u.scroll_position, u.server_id],
-    })),
-  });
+    }))
+  );
 }
 
 export async function getMaxServerId() {

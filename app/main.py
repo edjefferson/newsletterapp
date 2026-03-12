@@ -37,14 +37,8 @@ async def lifespan(app: FastAPI):
     start_scheduler()
 
     # Run initial sync in background so startup doesn't block
-    def _startup_sync():
-        try:
-            from .imap_sync import sync_newsletters
-            sync_newsletters()
-        except Exception as exc:
-            logging.getLogger(__name__).warning("Startup sync failed: %s", exc)
-
-    threading.Thread(target=_startup_sync, daemon=True).start()
+    from .routes.sync import run_sync_background
+    threading.Thread(target=run_sync_background, daemon=True).start()
 
     yield
 

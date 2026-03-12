@@ -1,8 +1,12 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.orm import Session, contains_eager
 
@@ -21,8 +25,7 @@ class NewsletterSummary(BaseModel):
     is_read: bool
     scroll_position: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class NewsletterDetail(NewsletterSummary):
@@ -82,8 +85,8 @@ def list_newsletters(
 @router.post("/mark-old-read")
 def mark_old_read(db: Session = Depends(get_db)):
     """Mark all newsletters older than 7 days as read."""
-    cutoff = datetime.utcnow() - timedelta(days=7)
-    now = datetime.utcnow()
+    cutoff = _utcnow() - timedelta(days=7)
+    now = _utcnow()
 
     # Count how many will actually change (unread → read)
     count = db.execute(text(
@@ -156,11 +159,11 @@ def save_progress(newsletter_id: int, update: ProgressUpdate, db: Session = Depe
         db.add(p)
 
     p.scroll_position = update.scroll_position
-    p.updated_at = datetime.utcnow()
+    p.updated_at = _utcnow()
 
     if update.is_read and not p.is_read:
         p.is_read = True
-        p.read_at = datetime.utcnow()
+        p.read_at = _utcnow()
     elif not update.is_read:
         p.is_read = False
         p.read_at = None

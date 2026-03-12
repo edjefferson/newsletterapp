@@ -1,4 +1,8 @@
-from datetime import datetime
+from datetime import datetime, timezone
+
+
+def _utcnow():
+    return datetime.now(timezone.utc).replace(tzinfo=None)
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import relationship
 from .database import Base
@@ -11,10 +15,10 @@ class Newsletter(Base):
     imap_uid = Column(Text, unique=True, nullable=False)
     subject = Column(Text, nullable=False, default="(no subject)")
     sender = Column(Text, nullable=False, default="")
-    received_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+    received_at = Column(DateTime, nullable=False, default=_utcnow, index=True)
     body_html = Column(Text, nullable=True)
     body_text = Column(Text, nullable=True)
-    synced_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    synced_at = Column(DateTime, nullable=False, default=_utcnow)
 
     progress = relationship("ReadingProgress", back_populates="newsletter", uselist=False, cascade="all, delete-orphan")
 
@@ -27,6 +31,6 @@ class ReadingProgress(Base):
     is_read = Column(Boolean, default=False, nullable=False, index=True)
     scroll_position = Column(Integer, default=0, nullable=False)
     read_at = Column(DateTime, nullable=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False, index=True)
 
     newsletter = relationship("Newsletter", back_populates="progress")
