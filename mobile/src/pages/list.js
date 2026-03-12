@@ -86,6 +86,37 @@ export async function renderList(app) {
   let hasMore = true;
   let loading = false;
   const PAGE_SIZE = 50;
+  const CACHE_KEY = 'nl_list_cache';
+
+  function renderItem(n) {
+    const li = document.createElement('li');
+    li.className = `list-item${n.is_read ? ' read' : ''}`;
+    const isFuture = new Date(n.received_at) > new Date();
+    li.innerHTML = `
+      <span class="unread-dot${n.is_read ? ' hidden' : n.scroll_position > 0 ? ' in-progress' : ''}"></span>
+      <span class="list-item-body">
+        <span class="list-item-subject">${esc(n.subject)}</span>
+        <span class="list-item-sender">${esc(n.sender)}</span>
+      </span>
+      <span class="list-item-date${isFuture ? ' future' : ''}">${formatDate(n.received_at)}</span>`;
+    li.addEventListener('click', () => {
+      li.classList.add('read');
+      li.querySelector('.unread-dot')?.classList.add('hidden');
+      window.location.hash = `#/reader/${n.id}`;
+    });
+    return li;
+  }
+
+  // Render cached items instantly so back-navigation feels immediate
+  try {
+    const cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || '[]');
+    if (cached.length > 0) {
+      const frag = document.createDocumentFragment();
+      cached.forEach(n => frag.appendChild(renderItem(n)));
+      listEl.appendChild(frag);
+      statusEl.textContent = `${cached.length} newsletter${cached.length !== 1 ? 's' : ''}`;
+    }
+  } catch (_) {}
 
   async function loadPage(p) {
     if (loading) return;
@@ -95,30 +126,19 @@ export async function renderList(app) {
       if (p === 1) {
         listEl.innerHTML = '';
         if (!items.length) {
+          sessionStorage.removeItem(CACHE_KEY);
           listEl.innerHTML = '<li class="empty">No newsletters. Tap Sync to fetch.</li>';
           statusEl.textContent = '';
           hasMore = false;
           return;
         }
+        try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(items)); } catch (_) {}
+        const frag = document.createDocumentFragment();
+        items.forEach(n => frag.appendChild(renderItem(n)));
+        listEl.appendChild(frag);
+      } else {
+        items.forEach(n => listEl.appendChild(renderItem(n)));
       }
-      items.forEach(n => {
-        const li = document.createElement('li');
-        li.className = `list-item${n.is_read ? ' read' : ''}`;
-        const isFuture = new Date(n.received_at) > new Date();
-        li.innerHTML = `
-          <span class="unread-dot${n.is_read ? ' hidden' : n.scroll_position > 0 ? ' in-progress' : ''}"></span>
-          <span class="list-item-body">
-            <span class="list-item-subject">${esc(n.subject)}</span>
-            <span class="list-item-sender">${esc(n.sender)}</span>
-          </span>
-          <span class="list-item-date${isFuture ? ' future' : ''}">${formatDate(n.received_at)}</span>`;
-        li.addEventListener('click', () => {
-          li.classList.add('read');
-          li.querySelector('.unread-dot')?.classList.add('hidden');
-          window.location.hash = `#/reader/${n.id}`;
-        });
-        listEl.appendChild(li);
-      });
       hasMore = items.length === PAGE_SIZE;
       page = p;
       const count = listEl.querySelectorAll('.list-item').length;
@@ -132,6 +152,8 @@ export async function renderList(app) {
     filterBtns.forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     filter = btn.dataset.filter;
+    sessionStorage.removeItem(CACHE_KEY);
+    listEl.innerHTML = '';
     page = 1; hasMore = true;
     loadPage(1);
   }));
