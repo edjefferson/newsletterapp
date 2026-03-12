@@ -12,6 +12,12 @@ function requireAuth() {
   }
 }
 
+function navigate(url) {
+  document.body.style.transition = "opacity 0.15s ease";
+  document.body.style.opacity = "0";
+  setTimeout(() => { window.location.href = url; }, 150);
+}
+
 async function apiFetch(path, options = {}) {
   const headers = { "Content-Type": "application/json" };
   const token = getToken();
@@ -83,7 +89,7 @@ async function initIndex() {
     li.addEventListener("click", () => {
       li.classList.add("read");
       li.querySelector(".unread-dot")?.classList.add("hidden");
-      window.location.href = `/reader/${n.id}`;
+      navigate(`/reader/${n.id}`);
     });
     return li;
   }
@@ -349,7 +355,13 @@ async function initReader() {
     // Check atBottom in case debounce hasn't fired yet
     const atBottom = window.scrollY + window.innerHeight >= document.body.scrollHeight - 50;
     await saveProgress(scrollPos, isRead || atBottom);
-    history.length > 1 ? history.back() : (location.href = "/");
+    if (history.length > 1) {
+      document.body.style.transition = "opacity 0.15s ease";
+      document.body.style.opacity = "0";
+      setTimeout(() => history.back(), 150);
+    } else {
+      navigate("/");
+    }
   });
 }
 
@@ -416,7 +428,7 @@ async function initLogin() {
       if (!res.ok) { errorEl.textContent = `Server error (${res.status}) — check APP_PASSWORD and SECRET_KEY are set.`; return; }
       const data = await res.json();
       setToken(data.token);
-      window.location.href = "/";
+      navigate("/");
     } catch {
       errorEl.textContent = "Login failed. Try again.";
     }

@@ -31,6 +31,11 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
+  animation: pageFadeIn 0.18s ease;
+}
+@keyframes pageFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ── Layout ── */

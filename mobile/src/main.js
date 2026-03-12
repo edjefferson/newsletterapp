@@ -28,16 +28,27 @@ async function route() {
   // Remove any stale scroll listeners from previous page
   window.onscroll = null;
 
+  // Hide instantly while we swap content (each render fn sets app.innerHTML synchronously)
+  app.style.transition = 'none';
+  app.style.opacity = '0';
+
   if (hash === '#/login') {
     renderLogin(app);
   } else if (hash === '#/') {
-    await renderList(app);
-    // On the list page, hardware back should exit the app
+    renderList(app).catch(console.error);
     activeBackHandle = await App.addListener('backButton', () => App.exitApp());
   } else if (hash.startsWith('#/reader/')) {
     const id = hash.split('/').pop();
-    await renderReader(app, id);
+    renderReader(app, id).catch(console.error);
   }
+
+  // Fade in after the new skeleton has been painted
+  requestAnimationFrame(() => {
+    app.style.transition = 'opacity 0.18s ease';
+    requestAnimationFrame(() => {
+      app.style.opacity = '1';
+    });
+  });
 }
 
 async function main() {
