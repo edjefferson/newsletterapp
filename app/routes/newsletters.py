@@ -6,7 +6,7 @@ def _utcnow():
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_serializer
 from sqlalchemy import text
 from sqlalchemy.orm import Session, contains_eager
 
@@ -29,6 +29,10 @@ class NewsletterSummary(BaseModel):
     source: str
 
     model_config = ConfigDict(from_attributes=True)
+
+    @field_serializer("received_at")
+    def serialize_received_at(self, dt: datetime) -> str:
+        return dt.isoformat() + "Z"
 
 
 class NewsletterDetail(NewsletterSummary):

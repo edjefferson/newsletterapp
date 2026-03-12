@@ -33,7 +33,7 @@ function formatDate(iso) {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const msgDay = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const days = Math.round((today - msgDay) / 86400000);
-  if (days === 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (days <= 0) return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   if (days === 1) return 'Yesterday';
   if (days < 7) return d.toLocaleDateString([], { weekday: 'short' });
   return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
@@ -104,7 +104,7 @@ export async function renderList(app) {
         const li = document.createElement('li');
         li.className = `list-item${n.is_read ? ' read' : ''}`;
         li.innerHTML = `
-          <span class="unread-dot${n.is_read ? ' hidden' : ''}"></span>
+          <span class="unread-dot${n.is_read ? ' hidden' : n.scroll_position > 0 ? ' in-progress' : ''}"></span>
           <span class="list-item-body">
             <span class="list-item-subject">${esc(n.subject)}</span>
             <span class="list-item-sender">${esc(n.sender)}</span>

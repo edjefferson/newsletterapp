@@ -187,6 +187,10 @@ body.dark .settings-panel { box-shadow: 0 4px 16px rgba(0,0,0,.4); }
   flex-shrink: 0;
 }
 .unread-dot.hidden { background: transparent; }
+.unread-dot.in-progress {
+  background: linear-gradient(to right, var(--unread-dot) 50%, transparent 50%);
+  border: 1.5px solid var(--unread-dot);
+}
 
 .list-item-body {
   min-width: 0;
