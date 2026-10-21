@@ -27,7 +27,7 @@
 const BATCH = 4;
 const LOAD_MARGIN = 2500; // px from the bottom before fetching more
 const SAVE_DELAY = 800;
-const PAGE_GAP_TOP = 16; // breathing room between the header and the page
+const PAGE_GAP_TOP = 24; // breathing room above the page (the header is hidden in pages mode)
 const PAGE_GAP_BOTTOM = 16; // …and between the page and the footer
 
 export function esc(str) {
@@ -138,7 +138,8 @@ export function createJumpControl(onJump) {
  * `total`), given at most `pageH` px of room. `straddlersAt(y)` returns the
  * boxes ({top, bottom}) of lines/images that a break at y would cut through;
  * the break moves up to the top of the highest one. If that would leave the
- * page less than `minFill` full (e.g. one huge image), it cuts anyway.
+ * page less than `minFill` full it cuts anyway — except for images
+ * ({kind: "image"}) that fit on a page, which always move to the next page.
  */
 export function chooseBreak(start, pageH, total, straddlersAt, minFill = 0.4) {
   if (start + pageH >= total) return total;
@@ -149,7 +150,8 @@ export function chooseBreak(start, pageH, total, straddlersAt, minFill = 0.4) {
     if (!cut.length) break;
     // Round down so a fractional top doesn't leave a sliver of the line/image showing
     const top = Math.floor(Math.min(...cut.map((s) => s.top)));
-    if (top <= start + pageH * minFill) break;
+    const wholeImage = cut.some((s) => s.kind === "image" && Math.floor(s.top) === top && s.bottom - s.top <= pageH);
+    if (top <= start || (top <= start + pageH * minFill && !wholeImage)) break;
     brk = top;
   }
   return Math.floor(brk);
@@ -209,9 +211,10 @@ export function createFeed(root, source, options = {}) {
   const { signal } = ctrl;
 
   const inset = () => opts.topInset();
-  const viewTop = () => window.scrollY + inset() + (page ? PAGE_GAP_TOP : 0);
+  // In pages mode the feed is a fixed frame and nothing scrolls; its top is the reading point
+  const viewTop = () => (page ? root.getBoundingClientRect().top + window.scrollY : window.scrollY + inset());
   const viewBottom = () =>
-    page ? window.scrollY + parseFloat(mask.style.top || window.innerHeight) : window.scrollY + window.innerHeight;
+    page ? viewTop() + page.visible : window.scrollY + window.innerHeight;
 
   function sectionBox(item) {
     const r = item.el.getBoundingClientRect();
@@ -251,6 +254,7 @@ export function createFeed(root, source, options = {}) {
         });
         iframe.addEventListener("load", resize);
         attachPageInput(doc);
+        fitImages(doc);
         resize();
       });
     } else if (n.body_text) {
@@ -348,7 +352,9 @@ export function createFeed(root, source, options = {}) {
 
   function maybeLoadMore() {
     if (restoring) return;
-    if (document.documentElement.scrollHeight - viewBottom() < LOAD_MARGIN) loadAfter();
+    if (page) {
+      if (items.indexOf(page.item) >= items.length - 2) loadAfter();
+    } else if (document.documentElement.scrollHeight - viewBottom() < LOAD_MARGIN) loadAfter();
   }
 
   // ── Position + read state ──
@@ -382,31 +388,55 @@ export function createFeed(root, source, options = {}) {
 
   // ── Pages mode ──
   //
-  // The feed stays one long document; a page is a window onto it. Page breaks
-  // are chosen so they don't cut through a line of text or an image, each
-  // article starts on a new page, and a mask hides anything below the break.
+  // The feed becomes a fixed frame between the top of the screen and the
+  // footer; turning a page moves the content inside it, so the document never
+  // scrolls. Breaks don't cut through lines or images, each article starts on
+  // a new page, images are scaled to fit a page, and the header is hidden
+  // until the reader taps the page.
 
-  let page = null; // { item, index, starts } while in pages mode
+  let page = null; // { item, index, starts, visible } while in pages mode
   const pageCache = new WeakMap(); // item el → { key, starts }
 
-  // Two masks: a strip under the header (the top gap) and everything below the page break
-  const maskTop = document.createElement("div");
-  maskTop.className = "page-mask page-mask-top";
-  const mask = document.createElement("div");
-  mask.className = "page-mask";
   const footer = document.createElement("div");
   footer.className = "page-footer";
   footer.innerHTML = `<span class="page-footer-title"></span><span class="page-footer-count"></span>`;
-  document.body.append(maskTop, mask, footer);
+  // Measures env(safe-area-inset-top), which CSS custom properties can't expose to JS
+  const safeProbe = document.createElement("div");
+  safeProbe.style.cssText = "position:fixed;top:0;left:0;width:0;height:env(safe-area-inset-top,0px);visibility:hidden;pointer-events:none";
+  document.body.append(footer, safeProbe);
 
+  const frameTop = () => safeProbe.offsetHeight + PAGE_GAP_TOP;
   const pageHeight = () =>
-    window.innerHeight - inset() - footer.getBoundingClientRect().height - PAGE_GAP_TOP - PAGE_GAP_BOTTOM;
+    window.innerHeight - frameTop() - PAGE_GAP_BOTTOM - footer.getBoundingClientRect().height;
+
+  // Scale images down to fit on one page so they never need splitting
+  let fitHeight = 0;
+  function fitImages(doc) {
+    let style = doc.getElementById("page-fit");
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = "page-fit";
+      doc.head?.appendChild(style);
+    }
+    style.textContent = opts.mode === "pages" && fitHeight
+      ? `img, video, svg { max-height: ${fitHeight}px !important; object-fit: contain; }`
+      : "";
+  }
+  function refitImages() {
+    const h = opts.mode === "pages" ? Math.floor(pageHeight() - 32) : 0;
+    if (h === fitHeight) return;
+    fitHeight = h;
+    for (const it of items) {
+      const doc = it.el.querySelector("iframe")?.contentDocument;
+      if (doc?.head) fitImages(doc);
+    }
+  }
 
   // Boxes (in article coordinates) of lines/images that a break at `y` would cut
   function straddlersAt(item, y) {
     const sec = item.el.getBoundingClientRect();
     const boxes = [];
-    const add = (r, offset) => boxes.push({ top: r.top + offset, bottom: r.bottom + offset });
+    const add = (r, offset, kind = "text") => boxes.push({ top: r.top + offset, bottom: r.bottom + offset, kind });
 
     const meta = item.el.querySelector(".reader-meta");
     if (meta) add(meta.getBoundingClientRect(), -sec.top);
@@ -422,7 +452,7 @@ export function createFeed(root, source, options = {}) {
           const x = w * fx;
           const el = doc.elementFromPoint(x, yi);
           if (el && /^(IMG|VIDEO|SVG|PICTURE|CANVAS|IFRAME|svg)$/.test(el.tagName)) {
-            add(el.getBoundingClientRect(), off);
+            add(el.getBoundingClientRect(), off, "image");
             continue;
           }
           let node = null, offset = 0;
@@ -453,7 +483,7 @@ export function createFeed(root, source, options = {}) {
       const top = r.top - sec.top + padTop;
       if (y > top && y < r.bottom - sec.top) {
         const line = top + Math.floor((y - top) / lh) * lh;
-        boxes.push({ top: line, bottom: line + lh });
+        boxes.push({ top: line, bottom: line + lh, kind: "text" });
       }
     }
     return boxes;
@@ -470,40 +500,50 @@ export function createFeed(root, source, options = {}) {
     return starts;
   }
 
-  // Draw the current page: scroll its start under the header and mask the rest
+  // Draw the current page: shift the feed so the page's start is at the top of
+  // the frame, and size the frame to end exactly at the page break
   function showPage() {
     if (!page) return;
-    const box = sectionBox(page.item);
     page.starts = pagesFor(page.item);
     page.index = Math.min(page.index, page.starts.length - 1);
+    const height = page.item.el.getBoundingClientRect().height;
     const start = page.starts[page.index];
-    const end = page.starts[page.index + 1] ?? box.height;
-    window.scrollTo(0, box.top + start - inset() - PAGE_GAP_TOP);
-    maskTop.style.top = `${inset()}px`;
-    maskTop.style.height = `${PAGE_GAP_TOP}px`;
-    mask.style.top = `${inset() + PAGE_GAP_TOP + (end - start)}px`;
+    const end = page.starts[page.index + 1] ?? height;
+    const itemOffset = page.item.el.getBoundingClientRect().top - list.getBoundingClientRect().top;
+    page.visible = end - start;
+    root.style.top = `${frameTop()}px`;
+    root.style.height = `${page.visible}px`;
+    list.style.transform = `translateY(${-(itemOffset + start)}px)`;
     footer.querySelector(".page-footer-title").textContent = senderName(page.item.n.sender);
     footer.querySelector(".page-footer-count").textContent =
       page.starts.length > 1 ? `${page.index + 1} / ${page.starts.length}` : "";
     update();
   }
 
-  // Enter pages mode at whichever page contains the current reading position
-  function snapToPage() {
-    if (!items.length) return;
-    const top = viewTop();
-    const item = items.find((it) => { const b = sectionBox(it); return b.top + b.height > top; }) || items[items.length - 1];
+  // Open the page of `item` that contains `offsetPx` (px into the article)
+  function openPageAt(item, offsetPx) {
     const starts = pagesFor(item);
-    const offset = top - sectionBox(item).top;
     let index = 0;
-    while (index + 1 < starts.length && starts[index + 1] <= offset + 2) index++;
-    page = { item, index, starts };
+    while (index + 1 < starts.length && starts[index + 1] <= offsetPx + 2) index++;
+    page = { item, index, starts, visible: 0 };
     showPage();
+  }
+
+  // Where the reader is in scroll mode, as an article and a px offset into it
+  function scrollReadingPoint() {
+    const top = window.scrollY + inset();
+    const item = items.find((it) => { const b = sectionBox(it); return b.top + b.height > top; }) || items[items.length - 1];
+    return { item, offset: Math.max(0, top - sectionBox(item).top) };
+  }
+
+  function setChrome(visible) {
+    document.body.classList.toggle("chrome-visible", visible);
   }
 
   let turning = false;
   async function turn(dir) {
     if (!page || turning) return;
+    setChrome(false);
     const i = items.indexOf(page.item);
     let target;
     if (dir > 0) {
@@ -530,7 +570,7 @@ export function createFeed(root, source, options = {}) {
         return;
       }
       await fade(0, -shift);
-      page = { ...target, starts: pagesFor(target.item) };
+      page = { ...target, starts: pagesFor(target.item), visible: 0 };
       showPage();
       await fade(shift, 0);
     } finally {
@@ -544,6 +584,8 @@ export function createFeed(root, source, options = {}) {
       e.preventDefault(); turn(1);
     } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key) || (e.key === " " && e.shiftKey)) {
       e.preventDefault(); turn(-1);
+    } else if (e.key === "Escape") {
+      setChrome(!document.body.classList.contains("chrome-visible"));
     }
   }
 
@@ -571,12 +613,20 @@ export function createFeed(root, source, options = {}) {
     if (Math.abs(wheelAcc) > 60) { turn(wheelAcc > 0 ? 1 : -1); wheelAcc = 0; wheelAt = now + 400; }
   }
 
+  // Tapping the page (not a link or control) shows/hides the header
+  function onTap(e) {
+    if (opts.mode !== "pages") return;
+    if (e.target.closest?.("a, button, input, select, textarea, label, header, .settings-panel")) return;
+    setChrome(!document.body.classList.contains("chrome-visible"));
+  }
+
   // Article bodies are iframes, whose events don't reach this document
   function attachPageInput(target) {
     target.addEventListener("keydown", onKey, { signal });
     target.addEventListener("touchstart", onTouchStart, { passive: true, signal });
     target.addEventListener("touchend", onTouchEnd, { passive: true, signal });
     target.addEventListener("wheel", onWheel, { passive: true, signal });
+    target.addEventListener("click", onTap, { signal });
   }
 
   const zones = document.createElement("div");
@@ -590,17 +640,36 @@ export function createFeed(root, source, options = {}) {
   }, { signal });
 
   function setMode(mode) {
-    opts.mode = mode;
+    const wasPages = !!page;
     const pages = mode === "pages";
+    // Remember the reading point in the layout we're leaving
+    const at = restoring || !items.length ? null
+      : wasPages ? { item: page.item, offset: page.starts[page.index] }
+      : scrollReadingPoint();
+    opts.mode = mode;
     document.documentElement.classList.toggle("feed-pages", pages);
     document.body.classList.toggle("feed-pages", pages);
-    if (pages && !restoring) snapToPage();
-    if (!pages) page = null;
+    setChrome(false);
+    refitImages();
+    if (pages) {
+      if (at) openPageAt(at.item, at.offset);
+    } else {
+      page = null;
+      root.style.top = root.style.height = "";
+      list.style.transform = "";
+      if (at) window.scrollTo(0, sectionBox(at.item).top + at.offset - inset());
+      update();
+    }
   }
 
   setMode(opts.mode);
   attachPageInput(document);
-  window.addEventListener("resize", () => { if (page) { pageCache.delete(page.item.el); showPage(); } }, { signal });
+  window.addEventListener("resize", () => {
+    if (!page) return;
+    refitImages();
+    pageCache.delete(page.item.el);
+    showPage();
+  }, { signal });
 
   window.addEventListener("scroll", update, { passive: true, signal });
   window.addEventListener("resize", update, { signal });
@@ -635,16 +704,18 @@ export function createFeed(root, source, options = {}) {
 
     const anchor = items.find((it) => it.n.id === first[0].id);
     const offset = pos && first[0].id === pos.newsletter_id ? pos.offset : 0;
-    const go = () => window.scrollTo(0, scrollTargetFor(sectionBox(anchor), offset, inset()));
-    go();
-    // Late layout (fonts, iframe load) can move things; re-apply once settled
+    // Late layout (fonts, iframe load) can move things; wait for it to settle
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    go();
     restoring = false;
     currentId = anchor.n.id;
     opts.onCurrent(anchor.n);
-    if (opts.mode === "pages") snapToPage();
-    update();
+    if (opts.mode === "pages") {
+      refitImages();
+      openPageAt(anchor, offset * sectionBox(anchor).height);
+    } else {
+      window.scrollTo(0, scrollTargetFor(sectionBox(anchor), offset, inset()));
+      update();
+    }
   }
 
   const ready = start();
@@ -682,11 +753,10 @@ export function createFeed(root, source, options = {}) {
       ctrl.abort();
       resizeObs.disconnect();
       zones.remove();
-      mask.remove();
-      maskTop.remove();
       footer.remove();
+      safeProbe.remove();
       document.documentElement.classList.remove("feed-pages");
-      document.body.classList.remove("feed-pages");
+      document.body.classList.remove("feed-pages", "chrome-visible");
     },
   };
 }

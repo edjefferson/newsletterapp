@@ -391,34 +391,37 @@ header a.btn-ghost { text-decoration: none; color: inherit; }
 .feed-edge { text-align: center; color: var(--muted); font-size: .8125rem; padding: 0; }
 .feed-edge:not(:empty) { padding: 24px 0; }
 
-/* Pages mode: no free scrolling; tap the left/right edges, swipe, wheel, or use the keyboard */
-.page-zones, .page-mask, .page-footer { display: none; }
+/* Pages mode: an immersive, fixed page. The feed becomes a frame that clips to the
+   current page and the content moves inside it, so the document never scrolls.
+   The header hides until the page is tapped; only the footer status stays. */
+.page-zones, .page-footer { display: none; }
 html.feed-pages { overflow: hidden; overscroll-behavior: none; }
-body.feed-pages .page-zones, body.feed-pages .page-mask, body.feed-pages .page-footer { display: block; }
-/* Covers whatever lies outside the page so neighbouring pages' lines don't peek through.
-   The masks and footer get their own compositing layers, and the feed sits in a fixed
-   low stacking context, so the sliding feed can never be drawn over them (Android
-   WebView otherwise does this while animating a layer that contains iframes). */
-.page-mask {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
-  background: var(--bg); pointer-events: none;
-  will-change: transform; transform: translateZ(0);
-}
-.page-mask-top { bottom: auto; }
-body.feed-pages .feed-root { position: relative; z-index: 0; will-change: transform, opacity; }
+body.feed-pages .page-zones { display: block; }
 body.feed-pages .page-footer { display: flex; }
+body.feed-pages .feed-root {
+  position: fixed; left: 0; right: 0; margin: 0 auto;
+  overflow: hidden; z-index: 0; will-change: transform, opacity;
+}
+body.feed-pages .feed-edge { display: none; }
+body.feed-pages .feed-item + .feed-item { border-top: none; padding-top: 8px; }
+body.feed-pages header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  transform: translateY(-100%); transition: transform .2s ease;
+  box-shadow: 0 1px 6px rgba(0,0,0,.08);
+}
+body.feed-pages.chrome-visible header { transform: none; }
 .page-footer {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
   justify-content: space-between; gap: 12px;
   max-width: 780px; margin: 0 auto;
   padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   font-size: .75rem; color: var(--muted); pointer-events: none;
-  background: var(--bg); will-change: transform; transform: translateZ(0);
+  background: var(--bg);
 }
 .page-footer-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .page-footer-count { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .page-zone {
-  position: fixed; top: 52px; bottom: 0; width: 22%; z-index: 5;
+  position: fixed; top: 0; bottom: 0; width: 22%; z-index: 5;
   background: transparent; border: none; padding: 0; cursor: pointer;
 }
 .page-zone[data-dir="prev"] { left: 0; cursor: w-resize; }

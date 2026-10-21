@@ -103,7 +103,22 @@ describe("chooseBreak", () => {
     expect(chooseBreak(0, 800, 5000, img)).toBe(600);
   });
 
-  it("cuts an image taller than most of the page rather than leave it nearly empty", () => {
+  it("moves an image that fits on a page to the next page, even from near the top", () => {
+    const img = () => [{ top: 100, bottom: 850, kind: "image" }];
+    expect(chooseBreak(0, 800, 5000, img)).toBe(100);
+  });
+
+  it("cuts an image taller than a page (nothing else would help)", () => {
+    const img = () => [{ top: 100, bottom: 1200, kind: "image" }];
+    expect(chooseBreak(0, 800, 5000, img)).toBe(800);
+  });
+
+  it("doesn't move an image that already starts the page", () => {
+    const img = () => [{ top: 0, bottom: 900, kind: "image" }];
+    expect(chooseBreak(0, 800, 5000, img)).toBe(800);
+  });
+
+  it("cuts a tall block (not an image) rather than leave the page nearly empty", () => {
     const img = () => [{ top: 100, bottom: 3000 }];
     expect(chooseBreak(0, 800, 5000, img)).toBe(800);
   });
