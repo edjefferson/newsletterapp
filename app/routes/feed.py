@@ -44,6 +44,7 @@ def _detail(n: Newsletter) -> NewsletterDetail:
 @router.get("", response_model=list[NewsletterDetail])
 def get_feed(
     anchor: Optional[int] = Query(None, description="Newsletter id to page from; omit to start at the oldest"),
+    since: Optional[datetime] = Query(None, description="Without an anchor: start at the first newsletter on/after this time"),
     direction: Literal["forward", "backward"] = Query("forward"),
     include_anchor: bool = Query(False),
     limit: int = Query(5, ge=1, le=50),
@@ -55,6 +56,8 @@ def get_feed(
     Either way the result is in chronological order.
     """
     q = db.query(Newsletter)
+    if anchor is None and since is not None:
+        q = q.filter(Newsletter.received_at >= _naive_utc(since))
     if anchor is not None:
         a = db.query(Newsletter).filter(Newsletter.id == anchor).first()
         if not a:

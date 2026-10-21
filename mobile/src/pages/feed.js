@@ -1,8 +1,8 @@
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
-import { createFeed, senderName } from '../../../static/feed.js';
+import { createFeed, createJumpControl, senderName } from '../../../static/feed.js';
 import {
-  getFeed, getFeedPosition, setFeedPosition, getOldestUnreadServerId, markReadByServerId,
+  getFeed, getFeedPosition, setFeedPosition, getOldestUnreadServerId, getFirstServerIdFrom, markReadByServerId,
   markProgressSynced, getSyncMeta,
 } from '../db.js';
 import { apiFetch } from '../api.js';
@@ -29,6 +29,9 @@ const source = {
   },
   load(anchorId, direction, limit, includeAnchor = false) {
     return getFeed(anchorId, direction, limit, includeAnchor);
+  },
+  findFrom(date) {
+    return getFirstServerIdFrom(date);
   },
   async markRead(n) {
     await markReadByServerId(n.id);
@@ -111,6 +114,14 @@ export async function renderFeed(app) {
     modeBtn.textContent = mode === 'pages' ? 'Pages' : 'Scroll';
     feed.setMode(mode);
   });
+
+  settingsPanel.insertBefore(
+    createJumpControl(async (date) => {
+      settingsPanel.classList.remove('open');
+      await feed.jumpToDate(date);
+    }),
+    settingsPanel.querySelector('.settings-divider')
+  );
 
   settingsBtn.addEventListener('click', (e) => {
     e.stopPropagation();

@@ -1,7 +1,7 @@
 /* ── Feed page (web) ──
  * Relies on the shared helpers from app.js (apiFetch, initSettingsMenu), which loads first.
  */
-import { createFeed, senderName } from "/static/feed.js";
+import { createFeed, createJumpControl, senderName } from "/static/feed.js";
 
 const MODE_KEY = "feed_mode";
 
@@ -38,6 +38,14 @@ const source = {
     if (includeAnchor) params.set("include_anchor", "true");
     return apiFetch(`/api/feed?${params}`);
   },
+  async findFrom(date) {
+    const params = new URLSearchParams({ since: date.toISOString(), limit: 1 });
+    const [first] = await apiFetch(`/api/feed?${params}`);
+    if (first) return first.id;
+    // Nothing that recent: go to the newest newsletter
+    const [newest] = await apiFetch("/api/feed?direction=backward&limit=1");
+    return newest ? newest.id : null;
+  },
   async markRead(n) {
     try {
       await apiFetch(`/api/newsletters/${n.id}/progress`, {
@@ -72,6 +80,12 @@ document.addEventListener("DOMContentLoaded", () => {
     setModeLabel(modeBtn, mode);
     feed.setMode(mode);
   });
+
+  const settingsPanel = document.getElementById("settings-panel");
+  settingsPanel.appendChild(createJumpControl(async (date) => {
+    settingsPanel.classList.remove("open");
+    await feed.jumpToDate(date);
+  }));
 
   initSettingsMenu();
 

@@ -95,6 +95,23 @@ def test_feed_orders_ties_by_id(client, auth_headers, db):
     assert [d["id"] for d in back] == [a.id, b.id]
 
 
+def test_feed_since_starts_at_first_on_or_after(client, auth_headers, db):
+    items = make_series(db)
+    data = client.get("/api/feed?since=2026-01-02T12:00:00Z&limit=1", headers=auth_headers).json()
+    assert [d["id"] for d in data] == [items[2].id]
+
+
+def test_feed_backward_without_anchor_is_newest(client, auth_headers, db):
+    items = make_series(db)
+    data = client.get("/api/feed?direction=backward&limit=1", headers=auth_headers).json()
+    assert [d["id"] for d in data] == [items[-1].id]
+
+
+def test_feed_since_in_future_is_empty(client, auth_headers, db):
+    make_series(db)
+    assert client.get("/api/feed?since=2099-01-01T00:00:00Z", headers=auth_headers).json() == []
+
+
 def test_feed_unknown_anchor_404(client, auth_headers):
     assert client.get("/api/feed?anchor=999999", headers=auth_headers).status_code == 404
 

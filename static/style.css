@@ -378,3 +378,9 @@ body.feed-pages .page-zones { display: block; }
 .page-zone[data-dir="prev"] { left: 0; cursor: w-resize; }
 .page-zone[data-dir="next"] { right: 0; cursor: e-resize; }
 .page-zone:hover { background: transparent; }
+
+.jump-select, .jump-date {
+  font: inherit; font-size: .8125rem; color: var(--text); background: var(--surface);
+  border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px;
+}
+.settings-row:has(.jump-date:not([hidden])) { flex-wrap: wrap; }

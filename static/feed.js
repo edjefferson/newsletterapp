@@ -11,6 +11,8 @@
  *                                          ('forward' = after anchor, 'backward' = before;
  *                                           anchorId null + 'forward' = from the start)
  *   source.markRead(newsletter)          → persist read state
+ *   source.findFrom(date)                → id of the first newsletter on/after `date`
+ *                                          (or the newest one if there's nothing that recent)
  *
  * The feed only grows forwards: it opens with the previous article above the
  * current one for context, and older newsletters are reached via the index.
@@ -76,6 +78,57 @@ export function scrollTargetFor(section, offset, inset) {
 /** True once the bottom of an article has come into view. */
 export function hasReachedEnd(section, viewBottom) {
   return section.top + section.height <= viewBottom + 4;
+}
+
+const JUMP_CHOICES = [
+  ["", "Choose…"],
+  ["1d", "Yesterday"],
+  ["7d", "1 week ago"],
+  ["30d", "1 month ago"],
+  ["date", "A date…"],
+];
+
+/** Start of the day `choice` refers to ("1d", "7d", "30d"), in local time. */
+export function jumpDate(choice, now = new Date()) {
+  const days = parseInt(choice, 10);
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  d.setDate(d.getDate() - days);
+  return d;
+}
+
+/**
+ * Settings-row control for jumping the feed to a point in time. Calls
+ * `onJump(date)`; returns the row element to put in a settings panel.
+ */
+export function createJumpControl(onJump) {
+  const row = document.createElement("div");
+  row.className = "settings-row";
+  row.innerHTML = `
+    <span class="settings-row-label">Jump to</span>
+    <select class="jump-select">${JUMP_CHOICES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>
+    <input class="jump-date" type="date" hidden>`;
+  const select = row.querySelector(".jump-select");
+  const dateInput = row.querySelector(".jump-date");
+  dateInput.max = new Date().toISOString().slice(0, 10);
+  select.addEventListener("change", () => {
+    if (select.value === "date") {
+      dateInput.hidden = false;
+      dateInput.showPicker?.();
+      return;
+    }
+    dateInput.hidden = true;
+    if (select.value) onJump(jumpDate(select.value));
+    select.value = "";
+  });
+  dateInput.addEventListener("change", () => {
+    if (!dateInput.value) return;
+    const [y, m, d] = dateInput.value.split("-").map(Number);
+    onJump(new Date(y, m - 1, d));
+    dateInput.value = "";
+    dateInput.hidden = true;
+    select.value = "";
+  });
+  return row;
 }
 
 function debounce(fn, ms) {
@@ -392,6 +445,11 @@ export function createFeed(root, source, options = {}) {
       atEnd = false;
       await loadAfter();
       update();
+    },
+    /** Jump to the first newsletter on/after `date`. */
+    async jumpToDate(date) {
+      const id = await source.findFrom(date);
+      if (id != null) await this.jumpTo(id);
     },
     /** Jump to a specific newsletter (e.g. chosen from the index). */
     async jumpTo(id) {

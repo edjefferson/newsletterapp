@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -66,5 +66,16 @@ describe("senderName", () => {
   it("keeps bare names and bare addresses", () => {
     expect(senderName("LRB")).toBe("LRB");
     expect(senderName("<a@b.com>")).toBe("<a@b.com>");
+  });
+});
+
+describe("jumpDate", () => {
+  const now = new Date(2026, 9, 21, 17, 45); // 21 Oct 2026, 17:45 local
+  it("goes back whole days to local midnight", () => {
+    expect(jumpDate("7d", now)).toEqual(new Date(2026, 9, 14));
+    expect(jumpDate("1d", now)).toEqual(new Date(2026, 9, 20));
+  });
+  it("crosses month boundaries", () => {
+    expect(jumpDate("30d", now)).toEqual(new Date(2026, 8, 21));
   });
 });

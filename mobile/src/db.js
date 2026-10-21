@@ -112,6 +112,17 @@ export async function getFeed(anchorServerId, direction = 'forward', limit = 4, 
   return forward ? rows : rows.reverse();
 }
 
+// First newsletter on/after `date`, or the newest one if there's nothing that recent
+export async function getFirstServerIdFrom(date) {
+  const first = await db.query(
+    'SELECT server_id FROM newsletters WHERE received_at >= ? ORDER BY received_at ASC, server_id ASC LIMIT 1',
+    [date.toISOString()]
+  );
+  if (first.values?.length) return first.values[0].server_id;
+  const newest = await db.query('SELECT server_id FROM newsletters ORDER BY received_at DESC, server_id DESC LIMIT 1');
+  return newest.values?.[0]?.server_id ?? null;
+}
+
 export async function getOldestUnreadServerId() {
   const result = await db.query(
     'SELECT server_id FROM newsletters WHERE is_read = 0 ORDER BY received_at ASC, server_id ASC LIMIT 1'
