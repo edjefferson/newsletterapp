@@ -131,6 +131,40 @@ export function createJumpControl(onJump) {
   return row;
 }
 
+/**
+ * Where to end a page that starts at `start` (px within an article of height
+ * `total`), given at most `pageH` px of room. `straddlersAt(y)` returns the
+ * boxes ({top, bottom}) of lines/images that a break at y would cut through;
+ * the break moves up to the top of the highest one. If that would leave the
+ * page less than `minFill` full (e.g. one huge image), it cuts anyway.
+ */
+export function chooseBreak(start, pageH, total, straddlersAt, minFill = 0.4) {
+  if (start + pageH >= total) return total;
+  let brk = start + pageH;
+  // A few passes: moving up to one line's top can land inside another (table columns)
+  for (let pass = 0; pass < 4; pass++) {
+    const cut = straddlersAt(brk).filter((s) => s.top < brk - 1 && s.bottom > brk + 1);
+    if (!cut.length) break;
+    const top = Math.min(...cut.map((s) => s.top));
+    if (top <= start + pageH * minFill) break;
+    brk = top;
+  }
+  return Math.round(brk);
+}
+
+/** All page start offsets for an article: [0, b1, b2, …]. */
+export function pageStarts(pageH, total, straddlersAt) {
+  const starts = [0];
+  let start = 0;
+  while (true) {
+    const brk = chooseBreak(start, pageH, total, straddlersAt);
+    if (brk >= total || brk <= start) break;
+    starts.push(brk);
+    start = brk;
+  }
+  return starts;
+}
+
 function debounce(fn, ms) {
   let t;
   const d = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
@@ -172,7 +206,8 @@ export function createFeed(root, source, options = {}) {
 
   const inset = () => opts.topInset();
   const viewTop = () => window.scrollY + inset();
-  const viewBottom = () => window.scrollY + window.innerHeight;
+  const viewBottom = () =>
+    page ? window.scrollY + parseFloat(mask.style.top || window.innerHeight) : window.scrollY + window.innerHeight;
 
   function sectionBox(item) {
     const r = item.el.getBoundingClientRect();
@@ -211,6 +246,7 @@ export function createFeed(root, source, options = {}) {
           if (!img.complete) img.addEventListener("load", resize, { once: true });
         });
         iframe.addEventListener("load", resize);
+        attachPageInput(doc);
         resize();
       });
     } else if (n.body_text) {
@@ -257,7 +293,8 @@ export function createFeed(root, source, options = {}) {
       const elTop = el.getBoundingClientRect().top + window.scrollY;
       if (elTop + old <= top + 1) delta += h - old;
     }
-    if (delta) window.scrollBy(0, delta);
+    if (page) showPage();
+    else if (delta) window.scrollBy(0, delta);
   });
 
   function insert(newItems, where) {
@@ -339,38 +376,197 @@ export function createFeed(root, source, options = {}) {
     maybeLoadMore();
   }
 
-  // ── Paging ──
+  // ── Pages mode ──
+  //
+  // The feed stays one long document; a page is a window onto it. Page breaks
+  // are chosen so they don't cut through a line of text or an image, each
+  // article starts on a new page, and a mask hides anything below the break.
 
-  function pageBy(dir) {
-    const step = window.innerHeight - inset() - 48; // keep a couple of lines of overlap
-    window.scrollTo({ top: window.scrollY + dir * step, behavior: "instant" });
+  let page = null; // { item, index, starts } while in pages mode
+  const pageCache = new WeakMap(); // item el → { key, starts }
+
+  const mask = document.createElement("div");
+  mask.className = "page-mask";
+  const footer = document.createElement("div");
+  footer.className = "page-footer";
+  footer.innerHTML = `<span class="page-footer-title"></span><span class="page-footer-count"></span>`;
+  document.body.append(mask, footer);
+
+  const pageHeight = () => window.innerHeight - inset() - footer.getBoundingClientRect().height - 8;
+
+  // Boxes (in article coordinates) of lines/images that a break at `y` would cut
+  function straddlersAt(item, y) {
+    const sec = item.el.getBoundingClientRect();
+    const boxes = [];
+    const add = (r, offset) => boxes.push({ top: r.top + offset, bottom: r.bottom + offset });
+
+    const meta = item.el.querySelector(".reader-meta");
+    if (meta) add(meta.getBoundingClientRect(), -sec.top);
+
+    const iframe = item.el.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (doc?.body) {
+      const off = iframe.getBoundingClientRect().top - sec.top;
+      const yi = y - off;
+      const w = doc.documentElement.clientWidth;
+      if (yi > 0 && yi < iframe.offsetHeight) {
+        for (const fx of [0.08, 0.25, 0.5, 0.75, 0.92]) {
+          const x = w * fx;
+          const el = doc.elementFromPoint(x, yi);
+          if (el && /^(IMG|VIDEO|SVG|PICTURE|CANVAS|IFRAME|svg)$/.test(el.tagName)) {
+            add(el.getBoundingClientRect(), off);
+            continue;
+          }
+          let node = null, offset = 0;
+          if (doc.caretRangeFromPoint) {
+            const r = doc.caretRangeFromPoint(x, yi);
+            if (r) { node = r.startContainer; offset = r.startOffset; }
+          } else if (doc.caretPositionFromPoint) {
+            const p = doc.caretPositionFromPoint(x, yi);
+            if (p) { node = p.offsetNode; offset = p.offset; }
+          }
+          if (node?.nodeType === Node.TEXT_NODE && node.length) {
+            const r = doc.createRange();
+            const i = Math.min(offset, node.length - 1);
+            r.setStart(node, i);
+            r.setEnd(node, i + 1);
+            const rect = r.getBoundingClientRect();
+            if (rect.height) add(rect, off);
+          }
+        }
+      }
+    }
+
+    const pre = item.el.querySelector(".reader-text");
+    if (pre) {
+      const r = pre.getBoundingClientRect();
+      const lh = parseFloat(getComputedStyle(pre).lineHeight) || 24;
+      const padTop = parseFloat(getComputedStyle(pre).paddingTop) || 0;
+      const top = r.top - sec.top + padTop;
+      if (y > top && y < r.bottom - sec.top) {
+        const line = top + Math.floor((y - top) / lh) * lh;
+        boxes.push({ top: line, bottom: line + lh });
+      }
+    }
+    return boxes;
+  }
+
+  function pagesFor(item) {
+    const total = item.el.getBoundingClientRect().height;
+    const h = pageHeight();
+    const key = `${Math.round(total)}:${Math.round(h)}`;
+    const cached = pageCache.get(item.el);
+    if (cached?.key === key) return cached.starts;
+    const starts = pageStarts(h, total, (y) => straddlersAt(item, y));
+    pageCache.set(item.el, { key, starts });
+    return starts;
+  }
+
+  // Draw the current page: scroll its start under the header and mask the rest
+  function showPage() {
+    if (!page) return;
+    const box = sectionBox(page.item);
+    page.starts = pagesFor(page.item);
+    page.index = Math.min(page.index, page.starts.length - 1);
+    const start = page.starts[page.index];
+    const end = page.starts[page.index + 1] ?? box.height;
+    window.scrollTo(0, box.top + start - inset());
+    mask.style.top = `${inset() + (end - start)}px`;
+    footer.querySelector(".page-footer-title").textContent = senderName(page.item.n.sender);
+    footer.querySelector(".page-footer-count").textContent =
+      page.starts.length > 1 ? `${page.index + 1} / ${page.starts.length}` : "";
     update();
   }
 
+  // Enter pages mode at whichever page contains the current reading position
+  function snapToPage() {
+    if (!items.length) return;
+    const top = viewTop();
+    const item = items.find((it) => { const b = sectionBox(it); return b.top + b.height > top; }) || items[items.length - 1];
+    const starts = pagesFor(item);
+    const offset = top - sectionBox(item).top;
+    let index = 0;
+    while (index + 1 < starts.length && starts[index + 1] <= offset + 2) index++;
+    page = { item, index, starts };
+    showPage();
+  }
+
+  let turning = false;
+  async function turn(dir) {
+    if (!page || turning) return;
+    const i = items.indexOf(page.item);
+    let target;
+    if (dir > 0) {
+      if (page.index + 1 < page.starts.length) target = { item: page.item, index: page.index + 1 };
+      else {
+        if (i === items.length - 1) await loadAfter();
+        if (items[i + 1]) target = { item: items[i + 1], index: 0 };
+      }
+    } else if (page.index > 0) {
+      target = { item: page.item, index: page.index - 1 };
+    } else if (items[i - 1]) {
+      target = { item: items[i - 1], index: pagesFor(items[i - 1]).length - 1 };
+    }
+    turning = true;
+    const shift = 28 * (dir > 0 ? 1 : -1);
+    const fade = (from, to) => root.animate(
+      [{ transform: `translateX(${from}px)`, opacity: from ? 0 : 1 }, { transform: `translateX(${to}px)`, opacity: to ? 0 : 1 }],
+      { duration: 110, easing: "ease-out" }
+    ).finished;
+    try {
+      if (!target) {
+        // Nothing further: a small nudge so the tap doesn't feel ignored
+        await root.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-shift / 3}px)` }, { transform: "translateX(0)" }], { duration: 160 }).finished;
+        return;
+      }
+      await fade(0, -shift);
+      page = { ...target, starts: pagesFor(target.item) };
+      showPage();
+      await fade(shift, 0);
+    } finally {
+      turning = false;
+    }
+  }
+
   function onKey(e) {
-    if (e.target.closest?.("input, textarea, select, button")) return;
-    if (opts.mode !== "pages") return;
-    if (["ArrowRight", "PageDown", " "].includes(e.key) && !(e.key === " " && e.shiftKey)) {
-      e.preventDefault(); pageBy(1);
-    } else if (["ArrowLeft", "PageUp"].includes(e.key) || (e.key === " " && e.shiftKey)) {
-      e.preventDefault(); pageBy(-1);
+    if (opts.mode !== "pages" || e.target.closest?.("input, textarea, select, button")) return;
+    if (["ArrowRight", "ArrowDown", "PageDown"].includes(e.key) || (e.key === " " && !e.shiftKey)) {
+      e.preventDefault(); turn(1);
+    } else if (["ArrowLeft", "ArrowUp", "PageUp"].includes(e.key) || (e.key === " " && e.shiftKey)) {
+      e.preventDefault(); turn(-1);
     }
   }
 
   let touchX = 0, touchY = 0;
   function onTouchStart(e) {
-    touchX = e.touches[0].clientX; touchY = e.touches[0].clientY;
+    touchX = e.touches[0].screenX; touchY = e.touches[0].screenY;
   }
   function onTouchEnd(e) {
     if (opts.mode !== "pages") return;
-    const dx = e.changedTouches[0].clientX - touchX;
-    const dy = e.changedTouches[0].clientY - touchY;
-    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) pageBy(dx < 0 ? 1 : -1);
+    const dx = e.changedTouches[0].screenX - touchX;
+    const dy = e.changedTouches[0].screenY - touchY;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 40) return;
+    // Swipe left or up = next page
+    if (Math.abs(dx) >= Math.abs(dy)) turn(dx < 0 ? 1 : -1);
+    else turn(dy < 0 ? 1 : -1);
   }
 
-  function onPageZoneClick(e) {
-    const zone = e.target.closest(".page-zone");
-    if (zone) pageBy(zone.dataset.dir === "next" ? 1 : -1);
+  let wheelAcc = 0, wheelAt = 0;
+  function onWheel(e) {
+    if (opts.mode !== "pages") return;
+    const now = Date.now();
+    if (now - wheelAt > 250) wheelAcc = 0;
+    wheelAt = now;
+    wheelAcc += e.deltaY;
+    if (Math.abs(wheelAcc) > 60) { turn(wheelAcc > 0 ? 1 : -1); wheelAcc = 0; wheelAt = now + 400; }
+  }
+
+  // Article bodies are iframes, whose events don't reach this document
+  function attachPageInput(target) {
+    target.addEventListener("keydown", onKey, { signal });
+    target.addEventListener("touchstart", onTouchStart, { passive: true, signal });
+    target.addEventListener("touchend", onTouchEnd, { passive: true, signal });
+    target.addEventListener("wheel", onWheel, { passive: true, signal });
   }
 
   const zones = document.createElement("div");
@@ -378,19 +574,26 @@ export function createFeed(root, source, options = {}) {
   zones.innerHTML = `<button class="page-zone" data-dir="prev" aria-label="Previous page"></button>
                      <button class="page-zone" data-dir="next" aria-label="Next page"></button>`;
   document.body.appendChild(zones);
-  zones.addEventListener("click", onPageZoneClick, { signal });
+  zones.addEventListener("click", (e) => {
+    const zone = e.target.closest(".page-zone");
+    if (zone) turn(zone.dataset.dir === "next" ? 1 : -1);
+  }, { signal });
 
   function setMode(mode) {
     opts.mode = mode;
-    document.body.classList.toggle("feed-pages", mode === "pages");
+    const pages = mode === "pages";
+    document.documentElement.classList.toggle("feed-pages", pages);
+    document.body.classList.toggle("feed-pages", pages);
+    if (pages && !restoring) snapToPage();
+    if (!pages) page = null;
   }
+
   setMode(opts.mode);
+  attachPageInput(document);
+  window.addEventListener("resize", () => { if (page) { pageCache.delete(page.item.el); showPage(); } }, { signal });
 
   window.addEventListener("scroll", update, { passive: true, signal });
   window.addEventListener("resize", update, { signal });
-  document.addEventListener("keydown", onKey, { signal });
-  document.addEventListener("touchstart", onTouchStart, { passive: true, signal });
-  document.addEventListener("touchend", onTouchEnd, { passive: true, signal });
   // Save immediately when the app/tab is backgrounded
   document.addEventListener("visibilitychange", () => {
     if (document.hidden && items.length) {
@@ -430,6 +633,7 @@ export function createFeed(root, source, options = {}) {
     restoring = false;
     currentId = anchor.n.id;
     opts.onCurrent(anchor.n);
+    if (opts.mode === "pages") snapToPage();
     update();
   }
 
@@ -459,6 +663,7 @@ export function createFeed(root, source, options = {}) {
       list.replaceChildren();
       topSentinel.textContent = "";
       heights = new WeakMap();
+      page = null;
       if (id != null) await source.savePosition(id, 0);
       await start();
     },
@@ -467,6 +672,9 @@ export function createFeed(root, source, options = {}) {
       ctrl.abort();
       resizeObs.disconnect();
       zones.remove();
+      mask.remove();
+      footer.remove();
+      document.documentElement.classList.remove("feed-pages");
       document.body.classList.remove("feed-pages");
     },
   };

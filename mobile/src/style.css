@@ -51,7 +51,9 @@ header {
   height: 52px;
 }
 
-.header-inner h1 { font-size: 1rem; font-weight: 600; flex: 1; }
+.header-inner h1 { font-size: 1rem; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.header-inner > * { flex-shrink: 0; }
+.header-inner > h1 { flex-shrink: 1; }
 
 /* ── Buttons ── */
 button {
@@ -389,10 +391,25 @@ header a.btn-ghost { text-decoration: none; color: inherit; }
 .feed-edge { text-align: center; color: var(--muted); font-size: .8125rem; padding: 0; }
 .feed-edge:not(:empty) { padding: 24px 0; }
 
-/* Pages mode: no free scrolling; tap the left/right edges, swipe, or use the keyboard */
-.page-zones { display: none; }
-body.feed-pages { overflow: hidden; touch-action: pan-x; }
-body.feed-pages .page-zones { display: block; }
+/* Pages mode: no free scrolling; tap the left/right edges, swipe, wheel, or use the keyboard */
+.page-zones, .page-mask, .page-footer { display: none; }
+html.feed-pages { overflow: hidden; overscroll-behavior: none; }
+body.feed-pages .page-zones, body.feed-pages .page-mask, body.feed-pages .page-footer { display: block; }
+/* Covers whatever lies below the page break so the next page's lines don't peek through */
+.page-mask {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
+  background: var(--bg); pointer-events: none;
+}
+body.feed-pages .page-footer { display: flex; }
+.page-footer {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+  justify-content: space-between; gap: 12px;
+  max-width: 780px; margin: 0 auto;
+  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  font-size: .75rem; color: var(--muted); pointer-events: none;
+}
+.page-footer-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
+.page-footer-count { flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .page-zone {
   position: fixed; top: 52px; bottom: 0; width: 22%; z-index: 5;
   background: transparent; border: none; padding: 0; cursor: pointer;

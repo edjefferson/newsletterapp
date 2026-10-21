@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -77,5 +77,50 @@ describe("jumpDate", () => {
   });
   it("crosses month boundaries", () => {
     expect(jumpDate("30d", now)).toEqual(new Date(2026, 8, 21));
+  });
+});
+
+describe("chooseBreak", () => {
+  const lines = (lh, from = 0) => (y) => {
+    const top = from + Math.floor((y - from) / lh) * lh;
+    return [{ top, bottom: top + lh }];
+  };
+
+  it("ends the article on its last page", () => {
+    expect(chooseBreak(0, 800, 500, () => [])).toBe(500);
+  });
+
+  it("keeps a clean break where nothing is cut", () => {
+    expect(chooseBreak(0, 800, 5000, lines(25))).toBe(800);
+  });
+
+  it("moves up to the top of a line it would cut", () => {
+    expect(chooseBreak(0, 810, 5000, lines(25))).toBe(800);
+  });
+
+  it("moves above an image it would cut", () => {
+    const img = () => [{ top: 600, bottom: 1000 }];
+    expect(chooseBreak(0, 800, 5000, img)).toBe(600);
+  });
+
+  it("cuts an image taller than most of the page rather than leave it nearly empty", () => {
+    const img = () => [{ top: 100, bottom: 3000 }];
+    expect(chooseBreak(0, 800, 5000, img)).toBe(800);
+  });
+});
+
+describe("pageStarts", () => {
+  it("covers the article with line-aligned pages", () => {
+    const lh = 30;
+    const at = (y) => { const t = Math.floor(y / lh) * lh; return [{ top: t, bottom: t + lh }]; };
+    const starts = pageStarts(500, 1600, at);
+    expect(starts[0]).toBe(0);
+    for (const s of starts) expect(s % lh).toBe(0);
+    for (let i = 1; i < starts.length; i++) expect(starts[i] - starts[i - 1]).toBeLessThanOrEqual(500);
+    expect(1600 - starts[starts.length - 1]).toBeLessThanOrEqual(500);
+  });
+
+  it("is a single page for short articles", () => {
+    expect(pageStarts(800, 300, () => [])).toEqual([0]);
   });
 });
