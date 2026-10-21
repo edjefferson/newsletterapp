@@ -12,6 +12,9 @@
  *                                           anchorId null + 'forward' = from the start)
  *   source.markRead(newsletter)          → persist read state
  *
+ * The feed only grows forwards: it opens with the previous article above the
+ * current one for context, and older newsletters are reached via the index.
+ *
  * Options:
  *   mode:       'scroll' | 'pages'
  *   topInset:   () => px hidden under the sticky header
@@ -20,7 +23,7 @@
  */
 
 const BATCH = 4;
-const LOAD_MARGIN = 2500; // px from either end before fetching more
+const LOAD_MARGIN = 2500; // px from the bottom before fetching more
 const SAVE_DELAY = 800;
 
 export function esc(str) {
@@ -106,9 +109,7 @@ export function createFeed(root, source, options = {}) {
   root.replaceChildren(topSentinel, list, bottomSentinel);
 
   const items = []; // { n, el } in chronological order
-  let atStart = false;
   let atEnd = false;
-  let loadingBefore = false;
   let loadingAfter = false;
   let currentId = null;
   let restoring = true;
@@ -214,13 +215,12 @@ export function createFeed(root, source, options = {}) {
       items.push(...els);
       frameReady.forEach((f) => f());
     } else {
-      const before = document.documentElement.scrollHeight;
+      // Only used while restoring, before the reader is positioned
       const frag = document.createDocumentFragment();
       els.forEach((it) => frag.appendChild(it.el));
       list.prepend(frag);
       items.unshift(...els);
       frameReady.forEach((f) => f());
-      if (!restoring) window.scrollBy(0, document.documentElement.scrollHeight - before);
     }
     for (const it of els) {
       heights.set(it.el, it.el.getBoundingClientRect().height);
@@ -245,24 +245,16 @@ export function createFeed(root, source, options = {}) {
     }
   }
 
-  async function loadBefore() {
-    if (loadingBefore || atStart || destroyed || !items.length) return;
-    loadingBefore = true;
-    try {
-      const batch = await source.load(items[0].n.id, "backward", BATCH);
-      if (destroyed) return;
-      if (batch.length < BATCH) atStart = true;
-      if (batch.length) insert(batch, "start");
-      topSentinel.textContent = atStart ? "Start of your newsletters." : "";
-    } finally {
-      loadingBefore = false;
-    }
+  async function loadPrevious() {
+    const batch = await source.load(items[0].n.id, "backward", 1);
+    if (destroyed) return;
+    if (batch.length) insert(batch, "start");
+    else topSentinel.textContent = "Start of your newsletters.";
   }
 
   function maybeLoadMore() {
     if (restoring) return;
     if (document.documentElement.scrollHeight - viewBottom() < LOAD_MARGIN) loadAfter();
-    if (window.scrollY < LOAD_MARGIN) loadBefore();
   }
 
   // ── Position + read state ──
@@ -372,8 +364,8 @@ export function createFeed(root, source, options = {}) {
     }
     if (first.length < BATCH) atEnd = true;
     insert(first, "end");
-    // Fill a screen's worth before the anchor so scrolling up is immediate
-    await loadBefore();
+    // One article of context above; nothing further back
+    await loadPrevious();
 
     const anchor = items.find((it) => it.n.id === first[0].id);
     const offset = pos && first[0].id === pos.newsletter_id ? pos.offset : 0;
@@ -405,8 +397,9 @@ export function createFeed(root, source, options = {}) {
     async jumpTo(id) {
       restoring = true;
       items.length = 0;
-      atStart = atEnd = false;
+      atEnd = false;
       list.replaceChildren();
+      topSentinel.textContent = "";
       heights = new WeakMap();
       if (id != null) await source.savePosition(id, 0);
       await start();
