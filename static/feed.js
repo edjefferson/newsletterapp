@@ -27,6 +27,8 @@
 const BATCH = 4;
 const LOAD_MARGIN = 2500; // px from the bottom before fetching more
 const SAVE_DELAY = 800;
+const PAGE_GAP_TOP = 16; // breathing room between the header and the page
+const PAGE_GAP_BOTTOM = 16; // …and between the page and the footer
 
 export function esc(str) {
   return String(str ?? "")
@@ -145,11 +147,12 @@ export function chooseBreak(start, pageH, total, straddlersAt, minFill = 0.4) {
   for (let pass = 0; pass < 4; pass++) {
     const cut = straddlersAt(brk).filter((s) => s.top < brk - 1 && s.bottom > brk + 1);
     if (!cut.length) break;
-    const top = Math.min(...cut.map((s) => s.top));
+    // Round down so a fractional top doesn't leave a sliver of the line/image showing
+    const top = Math.floor(Math.min(...cut.map((s) => s.top)));
     if (top <= start + pageH * minFill) break;
     brk = top;
   }
-  return Math.round(brk);
+  return Math.floor(brk);
 }
 
 /** All page start offsets for an article: [0, b1, b2, …]. */
@@ -194,6 +197,7 @@ export function createFeed(root, source, options = {}) {
   const bottomSentinel = document.createElement("div");
   bottomSentinel.className = "feed-edge";
   root.replaceChildren(topSentinel, list, bottomSentinel);
+  root.classList.add("feed-root");
 
   const items = []; // { n, el } in chronological order
   let atEnd = false;
@@ -205,7 +209,7 @@ export function createFeed(root, source, options = {}) {
   const { signal } = ctrl;
 
   const inset = () => opts.topInset();
-  const viewTop = () => window.scrollY + inset();
+  const viewTop = () => window.scrollY + inset() + (page ? PAGE_GAP_TOP : 0);
   const viewBottom = () =>
     page ? window.scrollY + parseFloat(mask.style.top || window.innerHeight) : window.scrollY + window.innerHeight;
 
@@ -385,14 +389,18 @@ export function createFeed(root, source, options = {}) {
   let page = null; // { item, index, starts } while in pages mode
   const pageCache = new WeakMap(); // item el → { key, starts }
 
+  // Two masks: a strip under the header (the top gap) and everything below the page break
+  const maskTop = document.createElement("div");
+  maskTop.className = "page-mask page-mask-top";
   const mask = document.createElement("div");
   mask.className = "page-mask";
   const footer = document.createElement("div");
   footer.className = "page-footer";
   footer.innerHTML = `<span class="page-footer-title"></span><span class="page-footer-count"></span>`;
-  document.body.append(mask, footer);
+  document.body.append(maskTop, mask, footer);
 
-  const pageHeight = () => window.innerHeight - inset() - footer.getBoundingClientRect().height - 8;
+  const pageHeight = () =>
+    window.innerHeight - inset() - footer.getBoundingClientRect().height - PAGE_GAP_TOP - PAGE_GAP_BOTTOM;
 
   // Boxes (in article coordinates) of lines/images that a break at `y` would cut
   function straddlersAt(item, y) {
@@ -470,8 +478,10 @@ export function createFeed(root, source, options = {}) {
     page.index = Math.min(page.index, page.starts.length - 1);
     const start = page.starts[page.index];
     const end = page.starts[page.index + 1] ?? box.height;
-    window.scrollTo(0, box.top + start - inset());
-    mask.style.top = `${inset() + (end - start)}px`;
+    window.scrollTo(0, box.top + start - inset() - PAGE_GAP_TOP);
+    maskTop.style.top = `${inset()}px`;
+    maskTop.style.height = `${PAGE_GAP_TOP}px`;
+    mask.style.top = `${inset() + PAGE_GAP_TOP + (end - start)}px`;
     footer.querySelector(".page-footer-title").textContent = senderName(page.item.n.sender);
     footer.querySelector(".page-footer-count").textContent =
       page.starts.length > 1 ? `${page.index + 1} / ${page.starts.length}` : "";
@@ -673,6 +683,7 @@ export function createFeed(root, source, options = {}) {
       resizeObs.disconnect();
       zones.remove();
       mask.remove();
+      maskTop.remove();
       footer.remove();
       document.documentElement.classList.remove("feed-pages");
       document.body.classList.remove("feed-pages");

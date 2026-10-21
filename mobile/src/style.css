@@ -395,11 +395,17 @@ header a.btn-ghost { text-decoration: none; color: inherit; }
 .page-zones, .page-mask, .page-footer { display: none; }
 html.feed-pages { overflow: hidden; overscroll-behavior: none; }
 body.feed-pages .page-zones, body.feed-pages .page-mask, body.feed-pages .page-footer { display: block; }
-/* Covers whatever lies below the page break so the next page's lines don't peek through */
+/* Covers whatever lies outside the page so neighbouring pages' lines don't peek through.
+   The masks and footer get their own compositing layers, and the feed sits in a fixed
+   low stacking context, so the sliding feed can never be drawn over them (Android
+   WebView otherwise does this while animating a layer that contains iframes). */
 .page-mask {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 4;
   background: var(--bg); pointer-events: none;
+  will-change: transform; transform: translateZ(0);
 }
+.page-mask-top { bottom: auto; }
+body.feed-pages .feed-root { position: relative; z-index: 0; will-change: transform, opacity; }
 body.feed-pages .page-footer { display: flex; }
 .page-footer {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
@@ -407,6 +413,7 @@ body.feed-pages .page-footer { display: flex; }
   max-width: 780px; margin: 0 auto;
   padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
   font-size: .75rem; color: var(--muted); pointer-events: none;
+  background: var(--bg); will-change: transform; transform: translateZ(0);
 }
 .page-footer-title { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; min-width: 0; }
 .page-footer-count { flex-shrink: 0; font-variant-numeric: tabular-nums; }
