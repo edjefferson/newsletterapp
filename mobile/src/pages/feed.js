@@ -1,6 +1,7 @@
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
-import { createFeed, createJumpControl, senderName } from '../../../static/feed.js';
+import { StatusBar } from '@capacitor/status-bar';
+import { createFeed, createJumpControl, createTextControls, senderName } from '../../../static/feed.js';
 import {
   getFeed, getFeedPosition, setFeedPosition, getOldestUnreadServerId, getFirstServerIdFrom, markReadByServerId,
   markProgressSynced, getSyncMeta,
@@ -14,6 +15,33 @@ const gearSvg = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" str
 async function getMode() {
   const { value } = await Preferences.get({ key: 'feed_mode' });
   return value || 'scroll';
+}
+
+// Full screen hides Android's status bar for distraction-free reading
+async function getFullScreen() {
+  const { value } = await Preferences.get({ key: 'full_screen' });
+  return value === 'on';
+}
+
+// The WebView extends under the hidden bar so that area shows the page background;
+// content stays clear of the camera cutout via env(safe-area-inset-top)
+async function applyFullScreen(on) {
+  try {
+    if (on) {
+      await StatusBar.setOverlaysWebView({ overlay: true });
+      await StatusBar.hide();
+    } else {
+      await StatusBar.show();
+      await StatusBar.setOverlaysWebView({ overlay: false });
+    }
+  } catch {
+    // Not available (e.g. running in a browser)
+  }
+}
+
+async function getText() {
+  const { value } = await Preferences.get({ key: 'feed_text' });
+  try { return value ? JSON.parse(value) : {}; } catch { return {}; }
 }
 
 const source = {
@@ -64,6 +92,10 @@ export async function renderFeed(app) {
               <span class="settings-row-label">Reading</span>
               <button class="theme-toggle-btn" id="mode-btn">Scroll</button>
             </div>
+            <div class="settings-row">
+              <span class="settings-row-label">Full screen</span>
+              <button class="theme-toggle-btn" id="fullscreen-btn">Off</button>
+            </div>
             <div class="settings-divider"></div>
             <button class="settings-action-btn" id="sync-btn">Sync now</button>
           </div>
@@ -82,11 +114,24 @@ export async function renderFeed(app) {
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
 
+  let fullScreen = await getFullScreen();
+  const fullScreenBtn = document.getElementById('fullscreen-btn');
+  fullScreenBtn.textContent = fullScreen ? 'On' : 'Off';
+  applyFullScreen(fullScreen);
+  fullScreenBtn.addEventListener('click', async () => {
+    fullScreen = !fullScreen;
+    await Preferences.set({ key: 'full_screen', value: fullScreen ? 'on' : 'off' });
+    fullScreenBtn.textContent = fullScreen ? 'On' : 'Off';
+    applyFullScreen(fullScreen);
+  });
+
   let mode = await getMode();
+  const text = await getText();
   modeBtn.textContent = mode === 'pages' ? 'Pages' : 'Scroll';
 
   const feed = createFeed(document.getElementById('feed-root'), source, {
     mode,
+    text,
     topInset: () => header.getBoundingClientRect().height,
     openLink: (url) => window.open(url, '_system'),
     onCurrent: (n) => { headerTitle.textContent = senderName(n.sender); },
@@ -115,6 +160,13 @@ export async function renderFeed(app) {
     feed.setMode(mode);
   });
 
+  settingsPanel.insertBefore(
+    createTextControls(text, async (next) => {
+      await Preferences.set({ key: 'feed_text', value: JSON.stringify(next) });
+      feed.setText(next);
+    }),
+    settingsPanel.querySelector('.settings-divider')
+  );
   settingsPanel.insertBefore(
     createJumpControl(async (date) => {
       settingsPanel.classList.remove('open');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -137,5 +137,36 @@ describe("pageStarts", () => {
 
   it("is a single page for short articles", () => {
     expect(pageStarts(800, 300, () => [])).toEqual([0]);
+  });
+});
+
+describe("textStyle", () => {
+  it("leaves the newsletter alone by default", () => {
+    expect(textStyle()).toBe("");
+    expect(textStyle({ font: "original", size: "original" })).toBe("");
+  });
+  it("overrides the font family, including headings", () => {
+    const css = textStyle({ font: "serif" });
+    expect(css).toMatch(/h1, h2, h3, h4, h5, h6 \{ font-family: .*serif !important; \}/);
+    expect(css).not.toMatch(/font-size/);
+  });
+  it("sets a base size and keeps headings proportionally larger", () => {
+    const css = textStyle({ size: 19 });
+    expect(css).toContain("body { font-size: 19px !important; }");
+    expect(css).toContain("h1 { font-size: 1.6em !important;");
+    expect(css).not.toMatch(/font-family/);
+  });
+});
+
+describe("sizePx", () => {
+  it("treats 'original' and junk as no override", () => {
+    expect(sizePx("original")).toBeNull();
+    expect(sizePx(undefined)).toBeNull();
+    expect(sizePx("l")).toBeNull();
+  });
+  it("clamps to the slider range", () => {
+    expect(sizePx(8)).toBe(12);
+    expect(sizePx(40)).toBe(26);
+    expect(sizePx("18")).toBe(18);
   });
 });

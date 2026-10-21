@@ -1,4 +1,6 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+/* Text size is set explicitly (incl. the reader's text setting); no autosizing */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 :root {
   --bg: #f9f9f7;
@@ -392,7 +394,7 @@ body.feed-pages.chrome-visible header { transform: none; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
   justify-content: space-between; gap: 12px;
   max-width: 780px; margin: 0 auto;
-  padding: 8px 16px calc(8px + env(safe-area-inset-bottom));
+  padding: 4px 16px calc(4px + env(safe-area-inset-bottom));
   font-size: .75rem; color: var(--muted); pointer-events: none;
   background: var(--bg);
 }
@@ -411,3 +413,16 @@ body.feed-pages.chrome-visible header { transform: none; }
   border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px;
 }
 .settings-row:has(.jump-date:not([hidden])) { flex-wrap: wrap; }
+
+.size-row { gap: 8px; }
+.size-stepper { display: flex; align-items: center; gap: 4px; }
+.size-step { min-width: 32px; font-size: 1rem; line-height: 1; }
+.size-step:disabled { opacity: .35; }
+.size-value { min-width: 70px; font-variant-numeric: tabular-nums; }
+
+/* Pages mode reads edge to edge: the page takes the article's own background (white,
+   or black once dark mode inverts it) and the article loses its card */
+body.feed-pages { --bg: #ffffff; --surface: #ffffff; }
+body.dark.feed-pages { --bg: #000000; --surface: #000000; }
+body.feed-pages .reader-frame-wrap { border: none; border-radius: 0; background: transparent; }
+.settings-row-label { white-space: nowrap; }

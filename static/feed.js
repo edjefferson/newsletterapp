@@ -27,8 +27,8 @@
 const BATCH = 4;
 const LOAD_MARGIN = 2500; // px from the bottom before fetching more
 const SAVE_DELAY = 800;
-const PAGE_GAP_TOP = 24; // breathing room above the page (the header is hidden in pages mode)
-const PAGE_GAP_BOTTOM = 16; // …and between the page and the footer
+const PAGE_GAP_TOP = 12; // breathing room above the page (the header is hidden in pages mode)
+const PAGE_GAP_BOTTOM = 8; // …and between the page and the footer
 
 export function esc(str) {
   return String(str ?? "")
@@ -44,7 +44,9 @@ export function senderName(sender) {
 
 export function articleStyle(dark) {
   // Always light colours — dark mode is handled by CSS invert() on the iframe element.
+  // text-size-adjust: stop Chrome's text autosizing enlarging paragraphs on narrow screens
   return `<style>
+    html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
            font-size: 15px; line-height: 1.6; color: #1a1a1a;
            background: #ffffff;
@@ -96,6 +98,104 @@ export function jumpDate(choice, now = new Date()) {
   const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   d.setDate(d.getDate() - days);
   return d;
+}
+
+// ── Text settings ──
+
+export const FONT_CHOICES = [["original", "Original"], ["sans", "Sans"], ["serif", "Serif"]];
+const FONT_STACKS = {
+  sans: 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+  serif: '"Iowan Old Style", Charter, "Bitstream Charter", Georgia, "Noto Serif", "Droid Serif", serif',
+};
+const SIZE_MIN = 12;
+const SIZE_MAX = 26;
+const SIZE_DEFAULT = 17; // where the slider starts when moving off "original"
+
+/** Text size in px from a stored setting ("original" or a number), or null for original. */
+export function sizePx(size) {
+  const n = Number(size);
+  return Number.isFinite(n) && n > 0 ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(n))) : null;
+}
+// Everything that carries body text in newsletter HTML (code/pre keep their own font)
+// Tables are listed explicitly: articles render in quirks mode, where tables don't inherit font size
+const TEXT_SELECTOR = "body, table, thead, tbody, tfoot, tr, td, th, center, p, li, ul, ol, blockquote, dd, dt, div, span, a, em, strong, b, i, u, font, section, article, figcaption, small";
+
+/**
+ * CSS overriding a newsletter's own typography with the reader's choices
+ * ({font, size}, "original" = leave as is). Injected into each article iframe.
+ */
+export function textStyle({ font = "original", size = "original" } = {}) {
+  let css = "";
+  if (FONT_STACKS[font]) {
+    css += `${TEXT_SELECTOR}, h1, h2, h3, h4, h5, h6 { font-family: ${FONT_STACKS[font]} !important; }\n`;
+  }
+  const px = sizePx(size);
+  if (px) {
+    css += `body { font-size: ${px}px !important; }
+${TEXT_SELECTOR.replace("body, ", "")} { font-size: inherit !important; line-height: 1.6 !important; }
+h1 { font-size: 1.6em !important; line-height: 1.25 !important; }
+h2 { font-size: 1.35em !important; line-height: 1.25 !important; }
+h3 { font-size: 1.15em !important; line-height: 1.3 !important; }
+h4, h5, h6 { font-size: 1em !important; }\n`;
+  }
+  return css;
+}
+
+/** Settings rows for font (select) and text size (slider). Calls `onChange({font, size})`. */
+export function createTextControls(prefs, onChange) {
+  const current = { font: "original", size: "original", ...prefs };
+  const frag = document.createDocumentFragment();
+
+  const fontRow = document.createElement("div");
+  fontRow.className = "settings-row";
+  fontRow.innerHTML = `
+    <span class="settings-row-label">Font</span>
+    <select class="jump-select" data-key="font">${FONT_CHOICES.map(([v, l]) => `<option value="${v}">${l}</option>`).join("")}</select>`;
+  const fontSelect = fontRow.querySelector("select");
+  fontSelect.value = current.font;
+  fontSelect.addEventListener("change", () => {
+    current.font = fontSelect.value;
+    onChange({ ...current });
+  });
+
+  const sizeRow = document.createElement("div");
+  sizeRow.className = "settings-row size-row";
+  sizeRow.innerHTML = `
+    <span class="settings-row-label">Text size</span>
+    <span class="size-stepper">
+      <button class="theme-toggle-btn size-step" type="button" data-step="-1" aria-label="Smaller text">−</button>
+      <button class="theme-toggle-btn size-value" type="button"></button>
+      <button class="theme-toggle-btn size-step" type="button" data-step="1" aria-label="Larger text">+</button>
+    </span>`;
+  const valueBtn = sizeRow.querySelector(".size-value");
+  const [minusBtn, plusBtn] = sizeRow.querySelectorAll(".size-step");
+  const show = () => {
+    const px = sizePx(current.size);
+    valueBtn.textContent = px ? `${px}px` : "Original";
+    valueBtn.title = px ? "Back to each newsletter's own size" : "";
+    minusBtn.disabled = px === SIZE_MIN;
+    plusBtn.disabled = px === SIZE_MAX;
+  };
+  // Re-laying out the feed is costly, so a quick run of taps applies once
+  const commit = debounce(() => onChange({ ...current }), 250);
+  for (const btn of [minusBtn, plusBtn]) {
+    btn.addEventListener("click", () => {
+      const px = sizePx(current.size);
+      current.size = sizePx((px ?? SIZE_DEFAULT) + Number(btn.dataset.step));
+      show();
+      commit();
+    });
+  }
+  valueBtn.addEventListener("click", () => {
+    if (current.size === "original") return;
+    current.size = "original";
+    show();
+    commit.flush();
+  });
+  show();
+
+  frag.append(fontRow, sizeRow);
+  return frag;
 }
 
 /**
@@ -187,6 +287,7 @@ export function createFeed(root, source, options = {}) {
   const opts = {
     mode: "scroll",
     topInset: () => 0,
+    text: { font: "original", size: "original" },
     openLink: (url) => window.open(url, "_blank", "noopener,noreferrer"),
     onCurrent: () => {},
     ...options,
@@ -253,14 +354,20 @@ export function createFeed(root, source, options = {}) {
           if (!img.complete) img.addEventListener("load", resize, { once: true });
         });
         iframe.addEventListener("load", resize);
+        // Text can reflow without an image loading (fonts arriving, text settings)
+        const RO = iframe.contentWindow?.ResizeObserver;
+        if (RO) new RO(resize).observe(doc.documentElement);
+        doc.fonts?.addEventListener?.("loadingdone", () => { resize(); pageCache.delete(iframe.closest(".feed-item")); });
         attachPageInput(doc);
         fitImages(doc);
+        applyText(doc);
         resize();
       });
     } else if (n.body_text) {
       const pre = document.createElement("pre");
       pre.className = "reader-text";
       pre.textContent = n.body_text;
+      styleTextBody(pre);
       bodyEl.appendChild(pre);
     } else {
       bodyEl.innerHTML = `<p class="empty" style="padding:24px">Not downloaded. Sync while online to read this one.</p>`;
@@ -411,6 +518,22 @@ export function createFeed(root, source, options = {}) {
 
   // Scale images down to fit on one page so they never need splitting
   let fitHeight = 0;
+  // Reader's font/size choices, applied inside each article iframe and to plain-text bodies
+  function applyText(doc) {
+    let style = doc.getElementById("reading-prefs");
+    if (!style) {
+      style = doc.createElement("style");
+      style.id = "reading-prefs";
+      doc.head?.appendChild(style);
+    }
+    style.textContent = textStyle(opts.text);
+  }
+  function styleTextBody(pre) {
+    const { font, size } = opts.text;
+    pre.style.fontFamily = FONT_STACKS[font] || "";
+    pre.style.fontSize = sizePx(size) ? `${sizePx(size)}px` : "";
+  }
+
   function fitImages(doc) {
     let style = doc.getElementById("page-fit");
     if (!style) {
@@ -423,7 +546,7 @@ export function createFeed(root, source, options = {}) {
       : "";
   }
   function refitImages() {
-    const h = opts.mode === "pages" ? Math.floor(pageHeight() - 32) : 0;
+    const h = opts.mode === "pages" ? Math.floor(pageHeight() - 16) : 0;
     if (h === fitHeight) return;
     fitHeight = h;
     for (const it of items) {
@@ -536,8 +659,11 @@ export function createFeed(root, source, options = {}) {
     return { item, offset: Math.max(0, top - sectionBox(item).top) };
   }
 
+  // The settings menu lives in the header, so it closes whenever the header hides
+  const openMenu = () => document.querySelector(".settings-panel.open");
   function setChrome(visible) {
     document.body.classList.toggle("chrome-visible", visible);
+    if (!visible) openMenu()?.classList.remove("open");
   }
 
   let turning = false;
@@ -613,10 +739,20 @@ export function createFeed(root, source, options = {}) {
     if (Math.abs(wheelAcc) > 60) { turn(wheelAcc > 0 ? 1 : -1); wheelAcc = 0; wheelAt = now + 400; }
   }
 
-  // Tapping the page (not a link or control) shows/hides the header
+  // Tapping the page (not a link or control) shows/hides the header. With the
+  // settings menu open, a tap elsewhere just closes the menu.
   function onTap(e) {
+    if (e.target.closest?.("header, .settings-panel")) return;
+    const menu = openMenu();
+    if (menu) {
+      menu.classList.remove("open");
+      // Swallow the tap: don't also follow a link or turn the page
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (opts.mode !== "pages") return;
-    if (e.target.closest?.("a, button, input, select, textarea, label, header, .settings-panel")) return;
+    if (e.target.closest?.("a, button, input, select, textarea, label")) return;
     setChrome(!document.body.classList.contains("chrome-visible"));
   }
 
@@ -626,7 +762,7 @@ export function createFeed(root, source, options = {}) {
     target.addEventListener("touchstart", onTouchStart, { passive: true, signal });
     target.addEventListener("touchend", onTouchEnd, { passive: true, signal });
     target.addEventListener("wheel", onWheel, { passive: true, signal });
-    target.addEventListener("click", onTap, { signal });
+    target.addEventListener("click", onTap, { capture: true, signal });
   }
 
   const zones = document.createElement("div");
@@ -723,6 +859,31 @@ export function createFeed(root, source, options = {}) {
   return {
     ready,
     setMode,
+    /** Change font/size ({font, size}), keeping the reader's place. */
+    async setText(text) {
+      opts.text = { ...opts.text, ...text };
+      for (const it of items) pageCache.delete(it.el);
+      // Remember where we are as a fraction through the article, since its height will change
+      const pos = items.length ? positionAt(items.map(sectionBox), viewTop()) : null;
+      for (const it of items) {
+        const doc = it.el.querySelector("iframe")?.contentDocument;
+        if (doc?.head) applyText(doc);
+        const pre = it.el.querySelector(".reader-text");
+        if (pre) styleTextBody(pre);
+      }
+      if (!pos) return;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      for (const it of items) {
+        const iframe = it.el.querySelector("iframe");
+        const doc = iframe?.contentDocument;
+        if (doc?.documentElement) iframe.style.height = doc.documentElement.scrollHeight + "px";
+      }
+      const item = items.find((it) => it.n.id === pos.newsletter_id);
+      if (!item) return;
+      const offsetPx = pos.offset * sectionBox(item).height;
+      if (page) openPageAt(item, offsetPx);
+      else window.scrollTo(0, sectionBox(item).top + offsetPx - inset());
+    },
     /** Look for newsletters that arrived after the feed reached its end (e.g. after a sync). */
     async refresh() {
       await ready;

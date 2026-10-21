@@ -1,9 +1,14 @@
 /* ── Feed page (web) ──
  * Relies on the shared helpers from app.js (apiFetch, initSettingsMenu), which loads first.
  */
-import { createFeed, createJumpControl, senderName } from "/static/feed.js";
+import { createFeed, createJumpControl, createTextControls, senderName } from "/static/feed.js";
 
 const MODE_KEY = "feed_mode";
+const TEXT_KEY = "feed_text";
+
+function getText() {
+  try { return JSON.parse(localStorage.getItem(TEXT_KEY)) || {}; } catch { return {}; }
+}
 
 function getMode() {
   try { return localStorage.getItem(MODE_KEY) || "scroll"; } catch { return "scroll"; }
@@ -67,6 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const feed = createFeed(document.getElementById("feed-root"), source, {
     mode,
+    text: getText(),
     topInset: () => header.getBoundingClientRect().height,
     onCurrent: (n) => {
       headerTitle.textContent = senderName(n.sender);
@@ -82,6 +88,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const settingsPanel = document.getElementById("settings-panel");
+  settingsPanel.appendChild(createTextControls(getText(), (text) => {
+    try { localStorage.setItem(TEXT_KEY, JSON.stringify(text)); } catch {}
+    feed.setText(text);
+  }));
   settingsPanel.appendChild(createJumpControl(async (date) => {
     settingsPanel.classList.remove("open");
     await feed.jumpToDate(date);
