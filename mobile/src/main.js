@@ -3,6 +3,7 @@ import { initDB } from './db.js';
 import { getToken } from './api.js';
 import { renderLogin } from './pages/login.js';
 import { renderList } from './pages/list.js';
+import { renderFeed } from './pages/feed.js';
 import { renderReader } from './pages/reader.js';
 import { App } from '@capacitor/app';
 
@@ -35,9 +36,14 @@ async function route() {
   if (hash === '#/login') {
     renderLogin(app);
   } else if (hash === '#/') {
-    renderList(app).catch(console.error);
+    renderFeed(app).catch(console.error);
     // Set up back button without blocking the fade-in
     App.addListener('backButton', () => App.exitApp())
+      .then(h => { activeBackHandle = h; })
+      .catch(console.error);
+  } else if (hash === '#/list') {
+    renderList(app).catch(console.error);
+    App.addListener('backButton', () => { window.location.hash = '#/'; })
       .then(h => { activeBackHandle = h; })
       .catch(console.error);
   } else if (hash.startsWith('#/reader/')) {

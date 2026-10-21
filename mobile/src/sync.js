@@ -1,5 +1,8 @@
 import { apiFetch } from './api.js';
-import { upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced, applyServerProgress } from './db.js';
+import {
+  upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced,
+  applyServerProgress, getFeedPosition, setFeedPosition,
+} from './db.js';
 
 const OFFLINE_DAYS = 30;
 
@@ -27,8 +30,47 @@ async function pullProgressUpdates() {
   }
 }
 
+// Push the local feed position if it hasn't reached the server yet. The server ignores it
+// if another device has saved a newer one.
+export async function pushFeedPosition() {
+  const pos = await getFeedPosition();
+  if (!pos?.dirty) return;
+  try {
+    await apiFetch('/api/feed/position', {
+      method: 'PUT',
+      body: JSON.stringify({ newsletter_id: pos.newsletter_id, offset: pos.offset, updated_at: pos.updated_at }),
+    });
+    const latest = await getFeedPosition();
+    // Only clear the flag if the reader hasn't moved on while the request was in flight
+    if (latest?.updated_at === pos.updated_at) await setFeedPosition({ ...latest, dirty: false });
+  } catch {
+    // Offline — stays dirty, retried on next sync
+  }
+}
+
+// Adopt the server's position if it's newer than ours (e.g. read further on the web)
+async function pullFeedPosition() {
+  try {
+    const server = await apiFetch('/api/feed/position');
+    if (!server?.saved) return;
+    const local = await getFeedPosition();
+    if (local?.dirty) return;
+    if (!local || new Date(server.updated_at) > new Date(local.updated_at)) {
+      await setFeedPosition({
+        newsletter_id: server.newsletter_id,
+        offset: server.offset,
+        updated_at: server.updated_at,
+        dirty: false,
+      });
+    }
+  } catch {
+    // Non-fatal
+  }
+}
+
 export async function syncFromServer(onProgress = null) {
   await flushPendingProgress();
+  await pushFeedPosition();
 
   const afterId = await getMaxServerId();
 
@@ -76,6 +118,7 @@ export async function syncFromServer(onProgress = null) {
 
   // Pull server read states last so they overwrite anything set by upsertNewsletters
   await pullProgressUpdates();
+  await pullFeedPosition();
 
   // Clear body content from anything older than the window (respects keep_offline flag)
   await pruneOldContent(OFFLINE_DAYS);

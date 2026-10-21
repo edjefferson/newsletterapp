@@ -348,3 +348,33 @@ body.dark .mark-read-btn.is-read { background: #14532d; color: #86efac; }
 .pw-toggle:hover { color: var(--text); background: transparent; }
 .login-error { color: #dc2626; font-size: .8125rem; margin-bottom: 12px; min-height: 18px; }
 .login-card .btn-primary { width: 100%; padding: 10px; font-size: .9375rem; }
+
+/* ── Continuous feed ── */
+/* The feed compensates for content changing above the viewport itself */
+html, body { overflow-anchor: none; }
+header a.btn-ghost { text-decoration: none; color: inherit; }
+
+.feed-item { padding-top: 8px; }
+.feed-item + .feed-item { border-top: 1px solid var(--border); padding-top: 24px; }
+.feed-item .reader-frame-wrap { margin-bottom: 24px; }
+.feed-item.read .reader-subject::after {
+  content: "Read"; margin-left: 8px; vertical-align: middle;
+  font-size: .6875rem; font-weight: 600; color: var(--muted);
+  border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px;
+}
+.reader-subtitle { font-size: .9375rem; color: var(--muted); margin-bottom: 6px; }
+
+.feed-edge { text-align: center; color: var(--muted); font-size: .8125rem; padding: 0; }
+.feed-edge:not(:empty) { padding: 24px 0; }
+
+/* Pages mode: no free scrolling; tap the left/right edges, swipe, or use the keyboard */
+.page-zones { display: none; }
+body.feed-pages { overflow: hidden; touch-action: pan-x; }
+body.feed-pages .page-zones { display: block; }
+.page-zone {
+  position: fixed; top: 52px; bottom: 0; width: 22%; z-index: 5;
+  background: transparent; border: none; padding: 0; cursor: pointer;
+}
+.page-zone[data-dir="prev"] { left: 0; cursor: w-resize; }
+.page-zone[data-dir="next"] { right: 0; cursor: e-resize; }
+.page-zone:hover { background: transparent; }

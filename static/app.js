@@ -88,8 +88,7 @@ async function initIndex() {
       <span class="list-item-date${isFuture ? " future" : ""}">${formatDate(n.received_at)}</span>`;
     li.addEventListener("click", () => {
       li.classList.add("read");
-      li.querySelector(".unread-dot")?.classList.add("hidden");
-      navigate(`/reader/${n.id}`);
+      navigate(`/?at=${n.id}`);
     });
     return li;
   }

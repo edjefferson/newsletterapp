@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 def _utcnow():
     return datetime.now(timezone.utc).replace(tzinfo=None)
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Text
+from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import relationship
 from .database import Base
 
@@ -37,3 +37,14 @@ class ReadingProgress(Base):
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False, index=True)
 
     newsletter = relationship("Newsletter", back_populates="progress")
+
+
+class FeedPosition(Base):
+    """Where the reader is in the continuous feed. Single-user app, so one row (id=1)."""
+    __tablename__ = "feed_position"
+
+    id = Column(Integer, primary_key=True)
+    newsletter_id = Column(Integer, ForeignKey("newsletters.id", ondelete="SET NULL"), nullable=True)
+    # Fraction (0–1) of the way through that newsletter, so it survives different screen widths
+    offset = Column(Float, default=0.0, nullable=False)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)

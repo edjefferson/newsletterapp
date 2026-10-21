@@ -1,6 +1,6 @@
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
-import { getNewsletters, getSyncMeta, markOldNewslettersRead } from '../db.js';
+import { getNewsletters, getSyncMeta, markOldNewslettersRead, setFeedPosition } from '../db.js';
 import { syncFromServer } from '../sync.js';
 import { apiFetch } from '../api.js';
 
@@ -8,10 +8,10 @@ async function getTheme() {
   const { value } = await Preferences.get({ key: 'theme' });
   return value;
 }
-async function setTheme(value) {
+export async function setTheme(value) {
   await Preferences.set({ key: 'theme', value });
 }
-async function initTheme() {
+export async function initTheme() {
   const saved = await getTheme();
   let dark;
   try {
@@ -21,7 +21,7 @@ async function initTheme() {
   }
   applyTheme(dark);
 }
-function applyTheme(dark) {
+export function applyTheme(dark) {
   document.body.classList.toggle('dark', dark);
   const btn = document.getElementById('theme-btn');
   if (btn) btn.textContent = dark ? 'Light' : 'Dark';
@@ -51,7 +51,8 @@ export async function renderList(app) {
   app.innerHTML = `
     <header>
       <div class="container header-inner">
-        <h1>Newsletters</h1>
+        <button class="btn-ghost" id="feed-btn">Feed</button>
+        <h1>Index</h1>
         <div class="settings-menu-wrap">
           <button class="settings-btn" id="settings-btn" aria-label="Settings">${gearSvg}</button>
           <div class="settings-panel" id="settings-panel">
@@ -101,8 +102,9 @@ export async function renderList(app) {
       <span class="list-item-date${isFuture ? ' future' : ''}">${formatDate(n.received_at)}</span>`;
     li.addEventListener('click', () => {
       li.classList.add('read');
-      li.querySelector('.unread-dot')?.classList.add('hidden');
-      window.location.hash = `#/reader/${n.id}`;
+      // Open the feed at this newsletter
+      setFeedPosition({ newsletter_id: n.server_id, offset: 0, updated_at: new Date().toISOString(), dirty: true })
+        .then(() => { window.location.hash = '#/'; });
     });
     return li;
   }
@@ -189,6 +191,7 @@ export async function renderList(app) {
   }
 
   syncBtn.addEventListener('click', doSync);
+  document.getElementById('feed-btn').addEventListener('click', () => { window.location.hash = '#/'; });
 
   await initTheme();
   document.getElementById('theme-btn').addEventListener('click', async () => {

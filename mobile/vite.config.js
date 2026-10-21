@@ -5,4 +5,8 @@ export default defineConfig({
   build: {
     outDir: 'dist',
   },
+  server: {
+    // The feed view is shared with the web app and lives in ../static
+    fs: { allow: ['..'] },
+  },
 });

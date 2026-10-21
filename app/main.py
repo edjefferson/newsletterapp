@@ -15,8 +15,9 @@ load_dotenv()
 from sqlalchemy import text
 
 from .database import Base, engine
-from .models import Newsletter, ReadingProgress  # noqa: F401 — ensure models are registered
+from .models import FeedPosition, Newsletter, ReadingProgress  # noqa: F401 — ensure models are registered
 from .routes import articles as articles_router
+from .routes import feed as feed_router
 from .routes import login as login_router
 from .routes import newsletters as newsletters_router
 from .routes import sync as sync_router
@@ -79,6 +80,7 @@ app.include_router(login_router.router)
 app.include_router(newsletters_router.router)
 app.include_router(sync_router.router)
 app.include_router(articles_router.router)
+app.include_router(feed_router.router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -97,6 +99,11 @@ def login_page():
 
 
 @app.get("/")
+def feed_page():
+    return FileResponse(str(STATIC_DIR / "feed.html"))
+
+
+@app.get("/list")
 def index():
     return FileResponse(str(STATIC_DIR / "index.html"))
 
