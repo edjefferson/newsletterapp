@@ -1,10 +1,15 @@
 /* ── Feed page (web) ──
  * Relies on the shared helpers from app.js (apiFetch, initSettingsMenu), which loads first.
  */
-import { createFeed, createJumpControl, createTextControls, senderName } from "/static/feed.js";
+import { createFeed, createJumpControl, createTextControls, createTurnControl, isEInk, senderName } from "/static/feed.js";
 
 const MODE_KEY = "feed_mode";
 const TEXT_KEY = "feed_text";
+const TURN_KEY = "feed_turn";
+
+function getTurn() {
+  try { return localStorage.getItem(TURN_KEY) || (isEInk() ? "instant" : "slide"); } catch { return "slide"; }
+}
 
 function getText() {
   try { return JSON.parse(localStorage.getItem(TEXT_KEY)) || {}; } catch { return {}; }
@@ -80,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const feed = createFeed(document.getElementById("feed-root"), source, {
     mode,
     text: getText(),
+    turn: getTurn(),
     topInset: () => header.getBoundingClientRect().height,
     onCurrent: (n) => {
       headerTitle.textContent = senderName(n.sender);
@@ -95,6 +101,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const settingsPanel = document.getElementById("settings-panel");
+  settingsPanel.appendChild(createTurnControl(getTurn(), (turn) => {
+    try { localStorage.setItem(TURN_KEY, turn); } catch {}
+    feed.setTurn(turn);
+  }));
   settingsPanel.appendChild(createTextControls(getText(), (text) => {
     try { localStorage.setItem(TEXT_KEY, JSON.stringify(text)); } catch {}
     feed.setText(text);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx, isEInk } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -168,5 +168,15 @@ describe("sizePx", () => {
     expect(sizePx(8)).toBe(12);
     expect(sizePx(40)).toBe(26);
     expect(sizePx("18")).toBe(18);
+  });
+});
+
+describe("isEInk", () => {
+  it("recognises Boox devices", () => {
+    expect(isEInk("Mozilla/5.0 (Linux; Android 11; Palma Build/RKQ1.210614.002; wv) AppleWebKit/537.36")).toBe(true);
+    expect(isEInk("Mozilla/5.0 (Linux; Android 12; NoteAir3C Build/SKQ1; wv)")).toBe(true);
+  });
+  it("leaves ordinary phones alone", () => {
+    expect(isEInk("Mozilla/5.0 (Linux; Android 17; Pixel 8a Build/CP3A.261005.005; wv)")).toBe(false);
   });
 });

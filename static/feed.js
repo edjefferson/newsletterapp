@@ -111,6 +111,31 @@ const SIZE_MIN = 12;
 const SIZE_MAX = 26;
 const SIZE_DEFAULT = 17; // where the slider starts when moving off "original"
 
+/** True on e-ink readers (Boox), where animation ghosts and flashes. */
+export function isEInk(ua = typeof navigator !== "undefined" ? navigator.userAgent : "") {
+  // Boox model names, which may be followed directly by a model number (e.g. "NoteAir3C")
+  return /\b(Palma|BOOX|Onyx|Note ?Air|Note ?Max|Tab ?Ultra|Tab ?Mini|Nova ?Air|Max ?Lumi|Leaf\d|Poke\d)/i.test(ua);
+}
+
+/** Settings row toggling page-turn animation ("slide" | "instant"). */
+export function createTurnControl(value, onChange) {
+  const row = document.createElement("div");
+  row.className = "settings-row";
+  row.innerHTML = `
+    <span class="settings-row-label">Page turn</span>
+    <button class="theme-toggle-btn" type="button"></button>`;
+  const btn = row.querySelector("button");
+  let current = value;
+  const label = () => { btn.textContent = current === "instant" ? "Instant" : "Slide"; };
+  btn.addEventListener("click", () => {
+    current = current === "instant" ? "slide" : "instant";
+    label();
+    onChange(current);
+  });
+  label();
+  return row;
+}
+
 /** Text size in px from a stored setting ("original" or a number), or null for original. */
 export function sizePx(size) {
   const n = Number(size);
@@ -293,6 +318,7 @@ export function createFeed(root, source, options = {}) {
     mode: "scroll",
     topInset: () => 0,
     text: { font: "original", size: "original" },
+    turn: isEInk() ? "instant" : "slide",
     openLink: (url) => window.open(url, "_blank", "noopener,noreferrer"),
     onCurrent: () => {},
     ...options,
@@ -712,13 +738,16 @@ export function createFeed(root, source, options = {}) {
     try {
       if (!target) {
         // Nothing further: a small nudge so the tap doesn't feel ignored
-        await root.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-shift / 3}px)` }, { transform: "translateX(0)" }], { duration: 160 }).finished;
+        if (opts.turn !== "instant") {
+          await root.animate([{ transform: "translateX(0)" }, { transform: `translateX(${-shift / 3}px)` }, { transform: "translateX(0)" }], { duration: 160 }).finished;
+        }
         return;
       }
-      await fade(0, -shift);
+      const animate = opts.turn !== "instant";
+      if (animate) await fade(0, -shift);
       page = { ...target, starts: pagesFor(target.item), visible: 0 };
       showPage();
-      await fade(shift, 0);
+      if (animate) await fade(shift, 0);
     } finally {
       turning = false;
     }
@@ -880,6 +909,10 @@ export function createFeed(root, source, options = {}) {
   return {
     ready,
     setMode,
+    /** Turn a page (1 = next, -1 = previous) when in pages mode. */
+    turnPage(dir) { return turn(dir); },
+    /** "slide" | "instant" page turns. */
+    setTurn(turn) { opts.turn = turn; },
     /** Change font/size ({font, size}), keeping the reader's place. */
     async setText(text) {
       opts.text = { ...opts.text, ...text };

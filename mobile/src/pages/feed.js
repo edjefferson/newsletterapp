@@ -1,8 +1,9 @@
 import { App } from '@capacitor/app';
+import { registerPlugin } from '@capacitor/core';
 import { Network } from '@capacitor/network';
 import { Preferences } from '@capacitor/preferences';
 import { StatusBar } from '@capacitor/status-bar';
-import { createFeed, createJumpControl, createTextControls, senderName } from '../../../static/feed.js';
+import { createFeed, createJumpControl, createTextControls, createTurnControl, isEInk, senderName } from '../../../static/feed.js';
 import {
   getFeed, getFeedPosition, setFeedPosition, getOldestUnreadServerId, getFirstServerIdFrom, markReadByServerId,
   markProgressSynced, getSyncMeta,
@@ -17,6 +18,9 @@ async function getMode() {
   const { value } = await Preferences.get({ key: 'feed_mode' });
   return value || 'scroll';
 }
+
+// Native helper (MainActivity/VolumeKeysPlugin): volume buttons turn pages
+const VolumeKeys = registerPlugin('VolumeKeys');
 
 // Full screen hides Android's status bar for distraction-free reading
 async function getFullScreen() {
@@ -100,6 +104,10 @@ export async function renderFeed(app) {
               <button class="theme-toggle-btn" id="mode-btn">Scroll</button>
             </div>
             <div class="settings-row">
+              <span class="settings-row-label">Volume keys</span>
+              <button class="theme-toggle-btn" id="volume-btn">Turn pages</button>
+            </div>
+            <div class="settings-row">
               <span class="settings-row-label">Full screen</span>
               <button class="theme-toggle-btn" id="fullscreen-btn">Off</button>
             </div>
@@ -135,11 +143,13 @@ export async function renderFeed(app) {
 
   let mode = await getMode();
   const text = await getText();
+  const turn = (await Preferences.get({ key: 'feed_turn' })).value || (isEInk() ? 'instant' : 'slide');
   modeBtn.textContent = mode === 'pages' ? 'Pages' : 'Scroll';
 
   const feed = createFeed(document.getElementById('feed-root'), source, {
     mode,
     text,
+    turn,
     topInset: () => header.getBoundingClientRect().height,
     openLink: (url) => window.open(url, '_system'),
     onCurrent: (n) => { headerTitle.textContent = senderName(n.sender); },
@@ -166,8 +176,37 @@ export async function renderFeed(app) {
     await Preferences.set({ key: 'feed_mode', value: mode });
     modeBtn.textContent = mode === 'pages' ? 'Pages' : 'Scroll';
     feed.setMode(mode);
+    updateVolumeKeys();
   });
 
+  // Volume buttons turn pages in pages mode, unless turned off in settings
+  let volumeKeys = (await Preferences.get({ key: 'volume_keys' })).value !== 'off';
+  const volumeBtn = document.getElementById('volume-btn');
+  const showVolumeKeys = () => { volumeBtn.textContent = volumeKeys ? 'Turn pages' : 'Volume'; };
+  function updateVolumeKeys() {
+    VolumeKeys.setEnabled({ enabled: volumeKeys && mode === 'pages' }).catch(() => {});
+  }
+  volumeBtn.addEventListener('click', async () => {
+    volumeKeys = !volumeKeys;
+    await Preferences.set({ key: 'volume_keys', value: volumeKeys ? 'on' : 'off' });
+    showVolumeKeys();
+    updateVolumeKeys();
+  });
+  showVolumeKeys();
+  updateVolumeKeys();
+  VolumeKeys.addListener('pageTurn', ({ direction }) => feed.turnPage(direction))
+    .then((h) => pageCtrl.signal.addEventListener('abort', () => h.remove()))
+    .catch(() => {});
+  // Leaving the feed (e.g. to the index): give the volume buttons back
+  pageCtrl.signal.addEventListener('abort', () => VolumeKeys.setEnabled({ enabled: false }).catch(() => {}));
+
+  settingsPanel.insertBefore(
+    createTurnControl(turn, async (next) => {
+      await Preferences.set({ key: 'feed_turn', value: next });
+      feed.setTurn(next);
+    }),
+    settingsPanel.querySelector('.settings-divider')
+  );
   settingsPanel.insertBefore(
     createTextControls(text, async (next) => {
       await Preferences.set({ key: 'feed_text', value: JSON.stringify(next) });
