@@ -1,5 +1,12 @@
 apply plugin: 'com.android.application'
 
+def gitCommitCount() {
+    try { return Integer.parseInt('git rev-list --count HEAD'.execute([], rootDir).text.trim()) } catch (ignored) { return 1 }
+}
+def gitShortHash() {
+    try { return 'git rev-parse --short HEAD'.execute([], rootDir).text.trim() } catch (ignored) { return "dev" }
+}
+
 android {
     namespace "com.edjefferson.newsletter"
     compileSdk rootProject.ext.compileSdkVersion
@@ -7,8 +14,10 @@ android {
         applicationId "com.edjefferson.newsletter"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // Version from git: build number = commit count, name shows the commit, so the
+        // installed build is visible in Android's App info and the installer
+        versionCode gitCommitCount()
+        versionName "1.0.${gitCommitCount()} (${gitShortHash()})"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
