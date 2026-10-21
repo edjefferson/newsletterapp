@@ -58,7 +58,11 @@ export async function pullFeedPosition() {
     const local = await getFeedPosition();
     if (local?.dirty) return;
     if (!(await getFeed(server.newsletter_id, 'forward', 1, true)).length) return;
-    if (!local || new Date(server.updated_at) > new Date(local.updated_at)) {
+    // With no unsent progress here, our position is the last one we saved or adopted,
+    // so a server save with a different timestamp came from another device. (Comparing
+    // which is later would depend on the two devices' clocks agreeing.)
+    // (Compared as instants: the server returns e.g. ".242000Z" for our ".242Z".)
+    if (!local || new Date(server.updated_at).getTime() !== new Date(local.updated_at).getTime()) {
       await setFeedPosition({
         newsletter_id: server.newsletter_id,
         offset: server.offset,

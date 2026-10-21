@@ -448,3 +448,4 @@ body.feed-pages { --bg: #ffffff; --surface: #ffffff; }
 body.dark.feed-pages { --bg: #000000; --surface: #000000; }
 body.feed-pages .reader-frame-wrap { border: none; border-radius: 0; background: transparent; }
 .settings-row-label { white-space: nowrap; }
+.settings-build { padding: 4px 10px 2px; font-size: .6875rem; color: var(--muted); }

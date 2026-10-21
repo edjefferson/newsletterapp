@@ -105,6 +105,7 @@ export async function renderFeed(app) {
             </div>
             <div class="settings-divider"></div>
             <button class="settings-action-btn" id="sync-btn">Sync now</button>
+            <div class="settings-build">Build ${__BUILD__}</div>
           </div>
         </div>
       </div>
@@ -196,7 +197,8 @@ export async function renderFeed(app) {
     const before = await getFeedPosition();
     await doSync();
     const after = await getFeedPosition();
-    if (after && !after.dirty && after.updated_at !== before?.updated_at) await feed.jumpTo(null);
+    const changed = after && (after.newsletter_id !== before?.newsletter_id || after.offset !== before?.offset);
+    if (changed && !after.dirty) await feed.jumpTo(null);
   }
 
   let syncing = false;
@@ -219,7 +221,7 @@ export async function renderFeed(app) {
       setTimeout(() => { syncBtn.textContent = 'Sync now'; syncBtn.disabled = false; }, 2000);
     }
   }
-  syncBtn.addEventListener('click', doSync);
+  syncBtn.addEventListener('click', () => syncAndFollow());
 
   try {
     await feed.ready;
