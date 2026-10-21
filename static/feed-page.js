@@ -18,6 +18,10 @@ function setModeLabel(btn, mode) {
   btn.textContent = mode === "pages" ? "Pages" : "Scroll";
 }
 
+// updated_at of the position this tab last loaded or saved; a different one on the
+// server means another device has moved on
+let knownPositionAt = null;
+
 const source = {
   async getPosition() {
     // /?at=<id> comes from the index: jump there and make it the saved position
@@ -27,14 +31,17 @@ const source = {
       await this.savePosition(at, 0);
       return { newsletter_id: at, offset: 0 };
     }
-    return apiFetch("/api/feed/position");
+    const pos = await apiFetch("/api/feed/position");
+    knownPositionAt = pos.updated_at;
+    return pos;
   },
   async savePosition(id, offset) {
     try {
-      await apiFetch("/api/feed/position", {
+      const saved = await apiFetch("/api/feed/position", {
         method: "PUT",
         body: JSON.stringify({ newsletter_id: id, offset, updated_at: new Date().toISOString() }),
       });
+      knownPositionAt = saved.updated_at;
     } catch (_) { /* next save will catch up */ }
   },
   load(anchorId, direction, limit, includeAnchor = false) {
@@ -98,6 +105,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }));
 
   initSettingsMenu();
+
+  // Returning to this tab: follow progress made on another device meanwhile
+  document.addEventListener("visibilitychange", async () => {
+    if (document.hidden) return;
+    try {
+      const pos = await apiFetch("/api/feed/position");
+      if (pos.saved && pos.updated_at !== knownPositionAt) await feed.jumpTo(null);
+    } catch (_) {}
+  });
 
   feed.ready.catch((err) => {
     document.getElementById("feed-root").innerHTML =

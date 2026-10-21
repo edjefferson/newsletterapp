@@ -1,7 +1,7 @@
 import { apiFetch } from './api.js';
 import {
   upsertNewsletters, getMaxServerId, setSyncMeta, pruneOldContent, getPendingProgress, markProgressSynced,
-  applyServerProgress, getFeedPosition, setFeedPosition,
+  applyServerProgress, getFeedPosition, setFeedPosition, getFeed,
 } from './db.js';
 
 const OFFLINE_DAYS = 30;
@@ -48,13 +48,16 @@ export async function pushFeedPosition() {
   }
 }
 
-// Adopt the server's position if it's newer than ours (e.g. read further on the web)
-async function pullFeedPosition() {
+// Adopt the server's position if it's newer than ours (e.g. read further on the web).
+// Skipped while ours has unsent progress, or if that newsletter isn't downloaded yet
+// (the next full sync brings it down and adopts the position then).
+export async function pullFeedPosition() {
   try {
     const server = await apiFetch('/api/feed/position');
     if (!server?.saved) return;
     const local = await getFeedPosition();
     if (local?.dirty) return;
+    if (!(await getFeed(server.newsletter_id, 'forward', 1, true)).length) return;
     if (!local || new Date(server.updated_at) > new Date(local.updated_at)) {
       await setFeedPosition({
         newsletter_id: server.newsletter_id,

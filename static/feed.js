@@ -271,9 +271,14 @@ export function pageStarts(pageH, total, straddlersAt) {
 }
 
 function debounce(fn, ms) {
-  let t;
-  const d = (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
-  d.flush = (...args) => { clearTimeout(t); fn(...args); };
+  let t = null;
+  let last = [];
+  const d = (...args) => {
+    last = args;
+    clearTimeout(t);
+    t = setTimeout(() => { t = null; fn(...last); }, ms);
+  };
+  d.flush = () => { if (t !== null) { clearTimeout(t); t = null; fn(...last); } };
   return d;
 }
 
@@ -470,11 +475,25 @@ export function createFeed(root, source, options = {}) {
     source.savePosition(pos.newsletter_id, pos.offset);
   }, SAVE_DELAY);
 
+  // Only save when the reader has actually moved. Re-saving the position we just
+  // opened at (or one that merely drifted as images/fonts loaded) would stamp it as
+  // newest and overwrite progress made on another device.
+  let lastPos = null; // null until the feed has been positioned after (re)opening
+  let lastInputAt = 0;
+  const noteInput = () => { lastInputAt = Date.now(); };
+  const INPUT_WINDOW = 5000; // covers momentum scrolling after the finger lifts
+  const moved = (pos) =>
+    pos.newsletter_id !== lastPos.newsletter_id || Math.abs(pos.offset - lastPos.offset) > 0.001;
+
   function update() {
     if (restoring || destroyed || !items.length) return;
     const pos = positionAt(items.map(sectionBox), viewTop());
     if (!pos) return;
-    save(pos);
+    if (!lastPos) lastPos = pos;
+    else if (moved(pos)) {
+      lastPos = pos;
+      if (Date.now() - lastInputAt < INPUT_WINDOW) save(pos);
+    }
     if (pos.newsletter_id !== currentId) {
       currentId = pos.newsletter_id;
       opts.onCurrent(items.find((it) => it.n.id === currentId).n);
@@ -669,6 +688,7 @@ export function createFeed(root, source, options = {}) {
   let turning = false;
   async function turn(dir) {
     if (!page || turning) return;
+    noteInput();
     setChrome(false);
     const i = items.indexOf(page.item);
     let target;
@@ -758,6 +778,9 @@ export function createFeed(root, source, options = {}) {
 
   // Article bodies are iframes, whose events don't reach this document
   function attachPageInput(target) {
+    for (const type of ["pointerdown", "touchstart", "touchmove", "wheel", "keydown"]) {
+      target.addEventListener(type, noteInput, { passive: true, capture: true, signal });
+    }
     target.addEventListener("keydown", onKey, { signal });
     target.addEventListener("touchstart", onTouchStart, { passive: true, signal });
     target.addEventListener("touchend", onTouchEnd, { passive: true, signal });
@@ -809,17 +832,15 @@ export function createFeed(root, source, options = {}) {
 
   window.addEventListener("scroll", update, { passive: true, signal });
   window.addEventListener("resize", update, { signal });
-  // Save immediately when the app/tab is backgrounded
+  // Send any pending save straight away when the app/tab is backgrounded
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && items.length) {
-      const pos = positionAt(items.map(sectionBox), viewTop());
-      if (pos) save.flush(pos);
-    }
+    if (document.hidden) save.flush();
   }, { signal });
 
   // ── Start ──
 
   async function start() {
+    lastPos = null;
     const pos = await source.getPosition();
     let first = [];
     if (pos?.newsletter_id != null) {
