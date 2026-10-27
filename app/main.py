@@ -43,8 +43,11 @@ async def lifespan(app: FastAPI):
         ]:
             try:
                 conn.execute(text(migration))
+                conn.commit()
             except Exception:
-                pass  # column already exists
+                # Column already exists. Postgres aborts the transaction on an error, which
+                # would make every later migration fail too, so roll back before the next.
+                conn.rollback()
         conn.commit()
     start_scheduler()
 
