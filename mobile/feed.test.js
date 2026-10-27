@@ -1,5 +1,6 @@
+// @vitest-environment happy-dom
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx, isEInk } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx, isEInk, textAnchorAt, textAnchorTop } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -178,5 +179,36 @@ describe("isEInk", () => {
   });
   it("leaves ordinary phones alone", () => {
     expect(isEInk("Mozilla/5.0 (Linux; Android 17; Pixel 8a Build/CP3A.261005.005; wv)")).toBe(false);
+  });
+});
+
+describe("text anchors", () => {
+  // happy-dom has no layout, so give each paragraph a fake rect by index
+  function page(paragraphs, rectOf) {
+    document.body.innerHTML = paragraphs.map((p) => `<p>${p}</p>`).join("");
+    const ps = [...document.body.querySelectorAll("p")];
+    document.createRange = () => {
+      const range = { startContainer: null, setStart(n) { this.startContainer = n; }, setEnd() {},
+        getBoundingClientRect() { return rectOf(ps.findIndex((p) => p.contains(this.startContainer))); } };
+      return range;
+    };
+    return document.body;
+  }
+  const rect = (i) => ({ top: i * 100, bottom: i * 100 + 20, height: 20 });
+
+  it("anchors on the first text below the given y", () => {
+    const body = page(["First paragraph of text.", "Second paragraph is here, with more words in it.", "Third."], rect);
+    expect(textAnchorAt(body, 50).startsWith("Second paragraph is here, with more words in it.")).toBe(true);
+  });
+
+  it("finds the anchor again wherever layout puts it", () => {
+    const body = page(["First paragraph of text.", "Second paragraph is here, with more words in it."], (i) => rect(i * 3));
+    expect(textAnchorTop(body, "Second paragraph is here")).toBe(300);
+  });
+
+  it("returns null when the text is gone or too short to trust", () => {
+    const body = page(["Hello there, reader."], rect);
+    expect(textAnchorTop(body, "not in the article")).toBeNull();
+    expect(textAnchorAt(body, 5000)).toBeNull();
   });
 });

@@ -81,6 +81,7 @@ def get_feed(
 class PositionUpdate(BaseModel):
     newsletter_id: int
     offset: float = Field(0.0, ge=0.0, le=1.0)
+    anchor: Optional[str] = Field(None, max_length=200)
     # When the client recorded this position; lets offline devices sync without clobbering newer ones
     updated_at: Optional[datetime] = None
 
@@ -90,6 +91,7 @@ def _position_response(pos: Optional[FeedPosition], db: Session) -> dict:
         return {
             "newsletter_id": pos.newsletter_id,
             "offset": pos.offset,
+            "anchor": pos.anchor,
             "updated_at": pos.updated_at.isoformat() + "Z",
             "saved": True,
         }
@@ -107,6 +109,7 @@ def _position_response(pos: Optional[FeedPosition], db: Session) -> dict:
     return {
         "newsletter_id": start.id if start else None,
         "offset": 0.0,
+        "anchor": None,
         "updated_at": None,
         "saved": False,
     }
@@ -133,6 +136,7 @@ def put_position(update: PositionUpdate, db: Session = Depends(get_db)):
 
     pos.newsletter_id = update.newsletter_id
     pos.offset = update.offset
+    pos.anchor = update.anchor
     pos.updated_at = updated_at
     db.commit()
     return _position_response(pos, db)

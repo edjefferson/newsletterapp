@@ -40,11 +40,11 @@ const source = {
     knownPositionAt = pos.updated_at;
     return pos;
   },
-  async savePosition(id, offset) {
+  async savePosition(id, offset, anchor = null) {
     try {
       const saved = await apiFetch("/api/feed/position", {
         method: "PUT",
-        body: JSON.stringify({ newsletter_id: id, offset, updated_at: new Date().toISOString() }),
+        body: JSON.stringify({ newsletter_id: id, offset, anchor, updated_at: new Date().toISOString() }),
       });
       knownPositionAt = saved.updated_at;
     } catch (_) { /* next save will catch up */ }

@@ -4,8 +4,8 @@
  * Capacitor app (imported and bundled by Vite). All data access goes through a
  * `source` object so each client can back it with the API or local SQLite:
  *
- *   source.getPosition()                 → { newsletter_id, offset } | null
- *   source.savePosition(id, offset)      → persist where the reader is
+ *   source.getPosition()                 → { newsletter_id, offset, anchor? } | null
+ *   source.savePosition(id, offset, anchor) → persist where the reader is (anchor: text snippet)
  *   source.load(anchorId, direction, n, includeAnchor)
  *                                        → newsletters in chronological order
  *                                          ('forward' = after anchor, 'backward' = before;
@@ -72,6 +72,65 @@ export function positionAt(sections, viewTop) {
   }
   const offset = current.height > 0 ? (viewTop - current.top) / current.height : 0;
   return { newsletter_id: current.id, offset: Math.min(1, Math.max(0, offset)) };
+}
+
+const ANCHOR_LEN = 60;
+
+/**
+ * Text nodes of `root` as one whitespace-collapsed string, with each character mapped
+ * back to its node and offset. Text is what survives a change of font size or width.
+ */
+function flatText(root) {
+  let text = "";
+  const map = [];
+  const visit = (node) => {
+    if (node.nodeType === 3) {
+      const s = node.nodeValue;
+      for (let i = 0; i < s.length; i++) {
+        const space = /\s/.test(s[i]);
+        if (space && (text === "" || text.endsWith(" "))) continue;
+        text += space ? " " : s[i];
+        map.push([node, i]);
+      }
+    } else if (node.nodeType === 1 && !/^(SCRIPT|STYLE|NOSCRIPT)$/i.test(node.tagName)) {
+      node.childNodes.forEach(visit);
+    }
+  };
+  visit(root);
+  return { text, map };
+}
+
+/** The first ANCHOR_LEN chars of text at or below `y` (px in `root`'s document), or null. */
+export function textAnchorAt(root, y) {
+  const doc = root.ownerDocument || root;
+  const { text, map } = flatText(root);
+  const range = doc.createRange();
+  // Binary search for the first character whose line ends below y (text runs top to bottom)
+  let lo = 0, hi = map.length - 1, found = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    range.setStart(map[mid][0], map[mid][1]);
+    range.setEnd(map[mid][0], map[mid][1] + 1);
+    const r = range.getBoundingClientRect();
+    if (!r.height) { lo = mid + 1; continue; } // hidden text: treat as above
+    if (r.bottom > y) { found = mid; hi = mid - 1; } else lo = mid + 1;
+  }
+  if (found < 0) return null;
+  const snippet = text.slice(found, found + ANCHOR_LEN).trim();
+  return snippet.length >= 8 ? snippet : null;
+}
+
+/** Top (px in `root`'s document) of the first occurrence of `anchor`, or null if not found. */
+export function textAnchorTop(root, anchor) {
+  if (!anchor) return null;
+  const doc = root.ownerDocument || root;
+  const { text, map } = flatText(root);
+  const at = text.indexOf(anchor);
+  if (at < 0) return null;
+  const range = doc.createRange();
+  range.setStart(map[at][0], map[at][1]);
+  range.setEnd(map[at][0], map[at][1] + 1);
+  return range.getBoundingClientRect().top;
 }
 
 /** Document scroll target for a saved position. */
@@ -497,8 +556,19 @@ export function createFeed(root, source, options = {}) {
 
   // ── Position + read state ──
 
+  // The text at the top of the view, for opening at the same spot on a device with a
+  // different font size or width. Looked up at save time, not on every scroll.
+  function anchorFor(id) {
+    const item = items.find((it) => it.n.id === id);
+    const iframe = item?.el.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc?.body) return null;
+    const y = viewTop() - (iframe.getBoundingClientRect().top + window.scrollY);
+    return y < 0 || y >= iframe.offsetHeight ? null : textAnchorAt(doc.body, y);
+  }
+
   const save = debounce((pos) => {
-    source.savePosition(pos.newsletter_id, pos.offset);
+    source.savePosition(pos.newsletter_id, pos.offset, anchorFor(pos.newsletter_id));
   }, SAVE_DELAY);
 
   // Only save when the reader has actually moved. Re-saving the position we just
@@ -697,6 +767,40 @@ export function createFeed(root, source, options = {}) {
     showPage();
   }
 
+  // The leaf element at the top of the view inside `item`'s iframe, and how far through it
+  // the view starts. null if the view top isn't over the article body.
+  function contentAnchor(item) {
+    const iframe = item.el.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc?.body) return null;
+    const y = viewTop() - (iframe.getBoundingClientRect().top + window.scrollY);
+    if (y < 0 || y >= iframe.offsetHeight) return null;
+    for (const el of doc.body.querySelectorAll("*")) {
+      if (el.children.length && el.tagName !== "A") continue;
+      const r = el.getBoundingClientRect();
+      if (r.height && r.bottom > y) return { el, frac: Math.min(1, Math.max(0, (y - r.top) / r.height)) };
+    }
+    return null;
+  }
+
+  // px into `item` where saved anchor text starts, or null if it can't be found
+  function anchorTextOffset(item, text) {
+    const iframe = item.el.querySelector("iframe");
+    const doc = iframe?.contentDocument;
+    if (!doc?.body) return null;
+    const top = textAnchorTop(doc.body, text);
+    if (top == null) return null;
+    return iframe.getBoundingClientRect().top + window.scrollY + top - sectionBox(item).top;
+  }
+
+  // px into `item` of a contentAnchor() element, after layout has changed
+  function anchorOffset(item, { el, frac }) {
+    const iframe = item.el.querySelector("iframe");
+    const r = el.getBoundingClientRect();
+    const iframeTop = iframe.getBoundingClientRect().top + window.scrollY;
+    return iframeTop + r.top + r.height * frac - sectionBox(item).top;
+  }
+
   // Where the reader is in scroll mode, as an article and a px offset into it
   function scrollReadingPoint() {
     const top = window.scrollY + inset();
@@ -889,15 +993,22 @@ export function createFeed(root, source, options = {}) {
     await loadPrevious();
 
     const anchor = items.find((it) => it.n.id === first[0].id);
-    const offset = pos && first[0].id === pos.newsletter_id ? pos.offset : 0;
+    const saved = pos && first[0].id === pos.newsletter_id ? pos : null;
+    const offset = saved ? saved.offset : 0;
     // Late layout (fonts, iframe load) can move things; wait for it to settle
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     restoring = false;
     currentId = anchor.n.id;
     opts.onCurrent(anchor.n);
+    // Prefer the saved text over the fraction: it lands in the right place even when this
+    // device's font size or width differs from the one that saved it
+    const textPx = saved?.anchor ? anchorTextOffset(anchor, saved.anchor) : null;
     if (opts.mode === "pages") {
       refitImages();
-      openPageAt(anchor, offset * sectionBox(anchor).height);
+      openPageAt(anchor, textPx ?? offset * sectionBox(anchor).height);
+    } else if (textPx != null) {
+      window.scrollTo(0, Math.max(0, Math.round(sectionBox(anchor).top + textPx - inset())));
+      update();
     } else {
       window.scrollTo(0, scrollTargetFor(sectionBox(anchor), offset, inset()));
       update();
@@ -919,6 +1030,9 @@ export function createFeed(root, source, options = {}) {
       for (const it of items) pageCache.delete(it.el);
       // Remember where we are as a fraction through the article, since its height will change
       const pos = items.length ? positionAt(items.map(sectionBox), viewTop()) : null;
+      // A fraction of the article drifts when only some of it scales (images, margins),
+      // so also pin the element at the top of the view and follow it through the change
+      const anchor = pos ? contentAnchor(items.find((it) => it.n.id === pos.newsletter_id)) : null;
       for (const it of items) {
         const doc = it.el.querySelector("iframe")?.contentDocument;
         if (doc?.head) applyText(doc);
@@ -934,7 +1048,7 @@ export function createFeed(root, source, options = {}) {
       }
       const item = items.find((it) => it.n.id === pos.newsletter_id);
       if (!item) return;
-      const offsetPx = pos.offset * sectionBox(item).height;
+      const offsetPx = anchor ? anchorOffset(item, anchor) : pos.offset * sectionBox(item).height;
       if (page) openPageAt(item, offsetPx);
       else window.scrollTo(0, sectionBox(item).top + offsetPx - inset());
     },

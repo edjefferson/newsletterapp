@@ -38,7 +38,7 @@ export async function pushFeedPosition() {
   try {
     await apiFetch('/api/feed/position', {
       method: 'PUT',
-      body: JSON.stringify({ newsletter_id: pos.newsletter_id, offset: pos.offset, updated_at: pos.updated_at }),
+      body: JSON.stringify({ newsletter_id: pos.newsletter_id, offset: pos.offset, anchor: pos.anchor ?? null, updated_at: pos.updated_at }),
     });
     const latest = await getFeedPosition();
     // Only clear the flag if the reader hasn't moved on while the request was in flight
@@ -66,6 +66,7 @@ export async function pullFeedPosition() {
       await setFeedPosition({
         newsletter_id: server.newsletter_id,
         offset: server.offset,
+        anchor: server.anchor ?? null,
         updated_at: server.updated_at,
         dirty: false,
       });

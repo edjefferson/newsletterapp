@@ -211,7 +211,7 @@ export async function pruneOldContent(days = 30) {
   return result.changes?.changes ?? 0;
 }
 
-// Feed position: { newsletter_id (server id), offset (0–1), updated_at (ISO), dirty }
+// Feed position: { newsletter_id (server id), offset (0–1), anchor (text snippet|null), updated_at (ISO), dirty }
 export async function getFeedPosition() {
   const raw = await getSyncMeta('feed_position');
   try { return raw ? JSON.parse(raw) : null; } catch { return null; }

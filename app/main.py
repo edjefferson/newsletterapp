@@ -39,6 +39,7 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE newsletters ADD COLUMN subtitle TEXT",
             "ALTER TABLE newsletters ADD COLUMN source TEXT NOT NULL DEFAULT 'imap'",
             "ALTER TABLE newsletters ADD COLUMN author TEXT",
+            "ALTER TABLE feed_position ADD COLUMN anchor TEXT",
         ]:
             try:
                 conn.execute(text(migration))

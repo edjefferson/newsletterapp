@@ -131,7 +131,7 @@ def test_position_defaults_to_oldest_unread(client, auth_headers, db):
     mark_read(db, items[0])
     mark_read(db, items[1])
     data = client.get("/api/feed/position", headers=auth_headers).json()
-    assert data == {"newsletter_id": items[2].id, "offset": 0.0, "updated_at": None, "saved": False}
+    assert data == {"newsletter_id": items[2].id, "offset": 0.0, "anchor": None, "updated_at": None, "saved": False}
 
 
 def test_position_defaults_to_newest_when_all_read(client, auth_headers, db):
@@ -197,3 +197,21 @@ def test_put_position_rejects_bad_offset(client, auth_headers, db):
 def test_put_position_unknown_newsletter_404(client, auth_headers):
     r = client.put("/api/feed/position", json={"newsletter_id": 999999}, headers=auth_headers)
     assert r.status_code == 404
+
+
+def test_put_position_stores_anchor(client, auth_headers, db):
+    items = make_series(db)
+    client.put(
+        "/api/feed/position",
+        json={"newsletter_id": items[1].id, "offset": 0.3, "anchor": "The quick brown fox"},
+        headers=auth_headers,
+    )
+    data = client.get("/api/feed/position", headers=auth_headers).json()
+    assert data["anchor"] == "The quick brown fox"
+
+
+def test_put_position_without_anchor_clears_it(client, auth_headers, db):
+    items = make_series(db)
+    client.put("/api/feed/position", json={"newsletter_id": items[1].id, "anchor": "old text here"}, headers=auth_headers)
+    client.put("/api/feed/position", json={"newsletter_id": items[1].id, "offset": 0.5}, headers=auth_headers)
+    assert client.get("/api/feed/position", headers=auth_headers).json()["anchor"] is None

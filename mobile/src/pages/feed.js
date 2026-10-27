@@ -62,8 +62,8 @@ const source = {
     const first = await getOldestUnreadServerId();
     return first != null ? { newsletter_id: first, offset: 0 } : null;
   },
-  async savePosition(id, offset) {
-    await setFeedPosition({ newsletter_id: id, offset, updated_at: new Date().toISOString(), dirty: true });
+  async savePosition(id, offset, anchor = null) {
+    await setFeedPosition({ newsletter_id: id, offset, anchor, updated_at: new Date().toISOString(), dirty: true });
     pushFeedPosition(); // best effort; stays dirty for the next sync if offline
   },
   load(anchorId, direction, limit, includeAnchor = false) {
@@ -236,7 +236,7 @@ export async function renderFeed(app) {
     const before = await getFeedPosition();
     await doSync();
     const after = await getFeedPosition();
-    const changed = after && (after.newsletter_id !== before?.newsletter_id || after.offset !== before?.offset);
+    const changed = after && (after.newsletter_id !== before?.newsletter_id || after.offset !== before?.offset || after.anchor !== before?.anchor);
     if (changed && !after.dirty) await feed.jumpTo(null);
   }
 

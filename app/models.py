@@ -47,4 +47,7 @@ class FeedPosition(Base):
     newsletter_id = Column(Integer, ForeignKey("newsletters.id", ondelete="SET NULL"), nullable=True)
     # Fraction (0–1) of the way through that newsletter, so it survives different screen widths
     offset = Column(Float, default=0.0, nullable=False)
+    # Snippet of text at the top of the view; finds the same spot when layout differs
+    # (font size, screen width) and the fraction above would land elsewhere
+    anchor = Column(Text, nullable=True)
     updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow, nullable=False)
