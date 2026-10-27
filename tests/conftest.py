@@ -4,6 +4,11 @@ import os
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("APP_PASSWORD", "test-password")
 os.environ.setdefault("DATABASE_URL", "sqlite:///:memory:")
+# app.main loads .env, which on a dev machine holds real IMAP credentials, and every test's
+# startup would then sync the real mailbox. Setting them (even empty) stops load_dotenv
+# overriding them, so the startup sync is a no-op.
+for _key in ("IMAP_USER", "IMAP_PASSWORD"):
+    os.environ[_key] = ""
 
 import hmac
 import hashlib
