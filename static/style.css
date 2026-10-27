@@ -250,6 +250,14 @@ body.dark .settings-panel { box-shadow: 0 4px 16px rgba(0,0,0,.4); }
 .reader-sender { font-size: .875rem; color: var(--muted); }
 .reader-date { font-size: .8125rem; color: var(--muted); margin-top: 2px; }
 
+/* The Margins setting also shrinks the feed's own side gutter (--feed-gutter, set by feed.js) */
+.container.feed-root { padding-left: var(--feed-gutter, 8px); padding-right: var(--feed-gutter, 8px); }
+.feed-root.edge-to-edge .reader-frame-wrap { border-left-width: 0; border-right-width: 0; border-radius: 0; }
+.feed-root .reader-meta, .feed-root .feed-edge {
+  padding-left: max(0px, calc(8px - var(--feed-gutter, 8px)));
+  padding-right: max(0px, calc(8px - var(--feed-gutter, 8px)));
+}
+
 .reader-frame-wrap {
   background: var(--surface);
   border: 1px solid var(--border);

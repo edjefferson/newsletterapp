@@ -533,6 +533,16 @@ export function createFeed(root, source, options = {}) {
   bottomSentinel.className = "feed-edge";
   root.replaceChildren(topSentinel, list, bottomSentinel);
   root.classList.add("feed-root");
+  // The Margins setting is the side space around article text. Below the default it also
+  // eats into the feed's own gutter, down to edge to edge at the narrowest.
+  function applyMargin() {
+    const side = marginPx(opts.text.margin);
+    const gutter = side === MARGIN_DEFAULT ? null : Math.min(8, Math.max(0, side - 2));
+    if (gutter == null) root.style.removeProperty("--feed-gutter");
+    else root.style.setProperty("--feed-gutter", `${gutter}px`);
+    root.classList.toggle("edge-to-edge", gutter === 0);
+  }
+  applyMargin();
 
   const items = []; // { n, el } in chronological order
   let atEnd = false;
@@ -1179,6 +1189,7 @@ export function createFeed(root, source, options = {}) {
     /** Change font/size ({font, size}), keeping the reader's place. */
     async setText(text) {
       opts.text = { ...opts.text, ...text };
+      applyMargin();
       for (const it of items) pageCache.delete(it.el);
       // Remember where we are as a fraction through the article, since its height will change
       const pos = items.length ? positionAt(items.map(sectionBox), viewTop()) : null;
