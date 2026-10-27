@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from "vitest";
-import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx, isEInk, textAnchorAt, textAnchorTop } from "../static/feed.js";
+import { positionAt, scrollTargetFor, hasReachedEnd, senderName, jumpDate, chooseBreak, pageStarts, textStyle, sizePx, marginPx, readingDefaults, blackenText, isEInk, textAnchorAt, textAnchorTop } from "../static/feed.js";
 
 const sections = [
   { id: 1, top: 0, height: 1000 },
@@ -210,5 +210,55 @@ describe("text anchors", () => {
     const body = page(["Hello there, reader."], rect);
     expect(textAnchorTop(body, "not in the article")).toBeNull();
     expect(textAnchorAt(body, 5000)).toBeNull();
+  });
+});
+
+describe("margins", () => {
+  it("defaults when unset or invalid, and clamps", () => {
+    expect(marginPx(undefined)).toBe(10);
+    expect(marginPx("nope")).toBe(10);
+    expect(marginPx(-5)).toBe(0);
+    expect(marginPx(500)).toBe(40);
+    expect(marginPx(4)).toBe(4);
+  });
+
+  it("only overrides the article's side padding when changed from the default", () => {
+    expect(textStyle({ margin: 10 })).toBe("");
+    const css = textStyle({ margin: 2 });
+    expect(css).toContain("padding-left: 2px !important");
+    expect(css).toContain("padding-right: 2px !important");
+  });
+});
+
+describe("text weight", () => {
+  it("adds nothing for the original weight and keeps headings bold otherwise", () => {
+    expect(textStyle({ weight: "original" })).toBe("");
+    expect(textStyle({ weight: 999 })).toBe("");
+    const css = textStyle({ weight: 500 });
+    expect(css).toContain("font-weight: 500 !important");
+    expect(css).toMatch(/b, strong, h1.*font-weight: 700 !important/);
+  });
+
+  it("defaults to heavier black text on e-ink only", () => {
+    expect(readingDefaults(true)).toEqual({ weight: 500, black: true });
+    expect(readingDefaults(false)).toEqual({ weight: "original", black: false });
+  });
+});
+
+describe("blackenText", () => {
+  const html = `<p id="grey" style="color: rgb(90,90,90)">grey</p>
+    <p id="light" style="color: rgb(240,240,240)">light on dark</p>
+    <p id="blue" style="color: rgb(37,99,235)">link-ish</p>
+    <div id="wrap"><span id="empty"></span></div>`;
+
+  it("blackens dark text, leaves light and coloured text, and can undo", () => {
+    document.body.innerHTML = html;
+    blackenText(document, true);
+    const color = (id) => document.getElementById(id).style.color;
+    expect(["#000", "rgb(0, 0, 0)"]).toContain(color("grey"));
+    expect(color("light")).toBe("rgb(240, 240, 240)");
+    expect(color("blue")).toBe("rgb(37, 99, 235)");
+    blackenText(document, false);
+    expect(color("grey")).toBe("rgb(90, 90, 90)");
   });
 });

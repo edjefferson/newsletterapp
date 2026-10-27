@@ -42,7 +42,7 @@ export function senderName(sender) {
   return name || String(sender ?? "");
 }
 
-export function articleStyle(dark) {
+export function articleStyle() {
   // Always light colours — dark mode is handled by CSS invert() on the iframe element.
   // text-size-adjust: stop Chrome's text autosizing enlarging paragraphs on narrow screens
   return `<style>
@@ -52,7 +52,10 @@ export function articleStyle(dark) {
            background: #ffffff;
            padding: 10px; max-width: 700px; margin: 0 auto; }
     img, table { max-width: 100% !important; }
-    img { height: auto; ${dark ? "filter: invert(1) hue-rotate(180deg);" : ""} }
+    img { height: auto; }
+    /* Dark mode inverts the whole iframe, so images get inverted back. The "dark" class on
+       <html> follows the app theme live (see syncFrameTheme). */
+    html.dark img { filter: invert(1) hue-rotate(180deg); }
     td, th { word-break: break-word; }
     a { color: #2563eb; }
     body { overflow-x: hidden; }
@@ -133,6 +136,30 @@ export function textAnchorTop(root, anchor) {
   return range.getBoundingClientRect().top;
 }
 
+const CONTENT_TAGS = /^(IMG|VIDEO|SVG|CANVAS|IFRAME|HR|PICTURE)$/i;
+
+/**
+ * Height an article iframe needs: where its content actually ends. scrollHeight can't be
+ * used alone because it never drops below the iframe's current height, so an article that
+ * was once laid out taller (narrower width, bigger font) would keep blank space at the end.
+ */
+export function fitFrame(iframe) {
+  const doc = iframe.contentDocument;
+  if (!doc?.documentElement || !doc.body) return;
+  let bottom = 0;
+  for (const el of doc.body.querySelectorAll("*")) {
+    const hasText = [...el.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim());
+    if (!hasText && !CONTENT_TAGS.test(el.tagName)) continue;
+    const r = el.getBoundingClientRect();
+    if (r.height > 0) bottom = Math.max(bottom, r.bottom);
+  }
+  const scroll = doc.documentElement.scrollHeight;
+  if (!bottom) { iframe.style.height = scroll + "px"; return; }
+  const cs = doc.defaultView.getComputedStyle(doc.body);
+  const pad = (parseFloat(cs.paddingBottom) || 0) + (parseFloat(cs.marginBottom) || 0);
+  iframe.style.height = Math.min(scroll, Math.ceil(bottom + pad)) + "px";
+}
+
 /** Document scroll target for a saved position. */
 export function scrollTargetFor(section, offset, inset) {
   return Math.max(0, Math.round(section.top + section.height * offset - inset));
@@ -169,6 +196,10 @@ const FONT_STACKS = {
 const SIZE_MIN = 12;
 const SIZE_MAX = 26;
 const SIZE_DEFAULT = 17; // where the slider starts when moving off "original"
+const MARGIN_MIN = 0;
+const MARGIN_MAX = 40;
+const MARGIN_DEFAULT = 10; // side padding of an article body (see articleStyle)
+const MARGIN_STEP = 2;
 
 /** True on e-ink readers (Boox), where animation ghosts and flashes. */
 export function isEInk(ua = typeof navigator !== "undefined" ? navigator.userAgent : "") {
@@ -200,6 +231,45 @@ export function sizePx(size) {
   const n = Number(size);
   return Number.isFinite(n) && n > 0 ? Math.min(SIZE_MAX, Math.max(SIZE_MIN, Math.round(n))) : null;
 }
+/** Side margin in px from a stored setting, clamped; the default if unset or invalid. */
+export function marginPx(margin) {
+  const n = Number(margin);
+  if (margin == null || margin === "" || !Number.isFinite(n)) return MARGIN_DEFAULT;
+  return Math.min(MARGIN_MAX, Math.max(MARGIN_MIN, Math.round(n)));
+}
+const WEIGHT_CHOICES = [["original", "Original"], [500, "Medium"], [700, "Bold"]];
+const weightOf = (w) => (WEIGHT_CHOICES.some(([v]) => v === Number(w)) ? Number(w) : "original");
+
+/** Reading prefs used until the reader changes them: heavier, black text on e-ink. */
+export function readingDefaults(eink = isEInk()) {
+  return eink ? { weight: 500, black: true } : { weight: "original", black: false };
+}
+
+const hasOwnText = (el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.nodeValue.trim());
+
+/**
+ * Make grey and dark text pure black (or undo it). Colour can't be forced in CSS alone:
+ * light text on a dark band must stay light, so only text that is already dark moves.
+ */
+export function blackenText(doc, on) {
+  if (!doc?.body) return;
+  const win = doc.defaultView;
+  for (const el of doc.body.querySelectorAll("*")) {
+    if (!on) {
+      if (el.dataset.blk === undefined) continue;
+      const [value, priority] = el.dataset.blk.split("|");
+      if (value) el.style.setProperty("color", value, priority); else el.style.removeProperty("color");
+      delete el.dataset.blk;
+      continue;
+    }
+    if (!hasOwnText(el)) continue;
+    const rgb = (win.getComputedStyle(el).color.match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    if (rgb.length < 3 || rgb.some((c) => c >= 170)) continue;
+    if (el.dataset.blk === undefined) el.dataset.blk = `${el.style.getPropertyValue("color")}|${el.style.getPropertyPriority("color")}`;
+    el.style.setProperty("color", "#000", "important");
+  }
+}
+
 // Everything that carries body text in newsletter HTML (code/pre keep their own font)
 // Tables are listed explicitly: articles render in quirks mode, where tables don't inherit font size
 const TEXT_SELECTOR = "body, table, thead, tbody, tfoot, tr, td, th, center, p, li, ul, ol, blockquote, dd, dt, div, span, a, em, strong, b, i, u, font, section, article, figcaption, small";
@@ -208,8 +278,14 @@ const TEXT_SELECTOR = "body, table, thead, tbody, tfoot, tr, td, th, center, p, 
  * CSS overriding a newsletter's own typography with the reader's choices
  * ({font, size}, "original" = leave as is). Injected into each article iframe.
  */
-export function textStyle({ font = "original", size = "original" } = {}) {
+export function textStyle({ font = "original", size = "original", margin, weight = "original" } = {}) {
   let css = "";
+  const w = weightOf(weight);
+  if (w !== "original") {
+    css += `${TEXT_SELECTOR} { font-weight: ${w} !important; }\nb, strong, h1, h2, h3, h4, h5, h6, th { font-weight: 700 !important; }\n`;
+  }
+  const side = marginPx(margin);
+  if (side !== MARGIN_DEFAULT) css += `body { padding-left: ${side}px !important; padding-right: ${side}px !important; }\n`;
   if (FONT_STACKS[font]) {
     css += `${TEXT_SELECTOR}, h1, h2, h3, h4, h5, h6 { font-family: ${FONT_STACKS[font]} !important; }\n`;
   }
@@ -227,7 +303,7 @@ h4, h5, h6 { font-size: 1em !important; }\n`;
 
 /** Settings rows for font (select) and text size (slider). Calls `onChange({font, size})`. */
 export function createTextControls(prefs, onChange) {
-  const current = { font: "original", size: "original", ...prefs };
+  const current = { font: "original", size: "original", margin: MARGIN_DEFAULT, ...readingDefaults(), ...prefs };
   const frag = document.createDocumentFragment();
 
   const fontRow = document.createElement("div");
@@ -278,7 +354,72 @@ export function createTextControls(prefs, onChange) {
   });
   show();
 
-  frag.append(fontRow, sizeRow);
+  const marginRow = document.createElement("div");
+  marginRow.className = "settings-row size-row";
+  marginRow.innerHTML = `
+    <span class="settings-row-label">Margins</span>
+    <span class="size-stepper">
+      <button class="theme-toggle-btn size-step" type="button" data-step="1" aria-label="Narrower margins">−</button>
+      <button class="theme-toggle-btn size-value" type="button"></button>
+      <button class="theme-toggle-btn size-step" type="button" data-step="-1" aria-label="Wider margins">+</button>
+    </span>`;
+  const marginBtn = marginRow.querySelector(".size-value");
+  const [narrowBtn, wideBtn] = marginRow.querySelectorAll(".size-step");
+  const showMargin = () => {
+    const px = marginPx(current.margin);
+    marginBtn.textContent = px === MARGIN_DEFAULT ? "Default" : `${px}px`;
+    marginBtn.title = "Back to the default margins";
+    // − narrows the margins (more text), + widens them
+    narrowBtn.disabled = px === MARGIN_MIN;
+    wideBtn.disabled = px === MARGIN_MAX;
+  };
+  const commitMargin = debounce(() => onChange({ ...current }), 250);
+  for (const btn of [narrowBtn, wideBtn]) {
+    btn.addEventListener("click", () => {
+      // data-step is +1 for narrower, so subtract
+      current.margin = marginPx(marginPx(current.margin) - Number(btn.dataset.step) * MARGIN_STEP);
+      showMargin();
+      commitMargin();
+    });
+  }
+  marginBtn.addEventListener("click", () => {
+    if (marginPx(current.margin) === MARGIN_DEFAULT) return;
+    current.margin = MARGIN_DEFAULT;
+    showMargin();
+    commitMargin.flush();
+  });
+  showMargin();
+
+  const weightRow = document.createElement("div");
+  weightRow.className = "settings-row";
+  weightRow.innerHTML = `
+    <span class="settings-row-label">Text weight</span>
+    <button class="theme-toggle-btn" type="button"></button>`;
+  const weightBtn = weightRow.querySelector("button");
+  const showWeight = () => { weightBtn.textContent = WEIGHT_CHOICES.find(([v]) => v === weightOf(current.weight))[1]; };
+  weightBtn.addEventListener("click", () => {
+    const i = WEIGHT_CHOICES.findIndex(([v]) => v === weightOf(current.weight));
+    current.weight = WEIGHT_CHOICES[(i + 1) % WEIGHT_CHOICES.length][0];
+    showWeight();
+    onChange({ ...current });
+  });
+  showWeight();
+
+  const blackRow = document.createElement("div");
+  blackRow.className = "settings-row";
+  blackRow.innerHTML = `
+    <span class="settings-row-label">Black text</span>
+    <button class="theme-toggle-btn" type="button"></button>`;
+  const blackBtn = blackRow.querySelector("button");
+  const showBlack = () => { blackBtn.textContent = current.black ? "On" : "Off"; };
+  blackBtn.addEventListener("click", () => {
+    current.black = !current.black;
+    showBlack();
+    onChange({ ...current });
+  });
+  showBlack();
+
+  frag.append(fontRow, sizeRow, marginRow, weightRow, blackRow);
   return frag;
 }
 
@@ -376,12 +517,13 @@ export function createFeed(root, source, options = {}) {
   const opts = {
     mode: "scroll",
     topInset: () => 0,
-    text: { font: "original", size: "original" },
+    text: {},
     turn: isEInk() ? "instant" : "slide",
     openLink: (url) => window.open(url, "_blank", "noopener,noreferrer"),
     onCurrent: () => {},
     ...options,
   };
+  opts.text = { font: "original", size: "original", margin: MARGIN_DEFAULT, ...readingDefaults(), ...opts.text };
 
   const list = document.createElement("div");
   list.className = "feed";
@@ -422,17 +564,14 @@ export function createFeed(root, source, options = {}) {
       iframe.scrolling = "no";
       iframe.title = n.subject;
       bodyEl.appendChild(iframe);
-      const resize = () => {
-        const doc = iframe.contentDocument;
-        if (doc?.documentElement) iframe.style.height = doc.documentElement.scrollHeight + "px";
-      };
+      const resize = () => fitFrame(iframe);
       // An iframe only has a document once it's attached, so fill it in after insertion
       frameReady.push(() => {
         const doc = iframe.contentDocument;
-        const dark = document.body.classList.contains("dark");
         doc.open();
-        doc.write(articleStyle(dark) + n.body_html);
+        doc.write(articleStyle() + n.body_html);
         doc.close();
+        doc.documentElement.classList.toggle("dark", document.body.classList.contains("dark"));
         doc.querySelectorAll("a[href]").forEach((a) => {
           a.addEventListener("click", (e) => {
             e.preventDefault();
@@ -642,9 +781,14 @@ export function createFeed(root, source, options = {}) {
       doc.head?.appendChild(style);
     }
     style.textContent = textStyle(opts.text);
+    blackenText(doc, !!opts.text.black);
   }
   function styleTextBody(pre) {
-    const { font, size } = opts.text;
+    const { font, size, margin, weight, black } = opts.text;
+    pre.style.fontWeight = weightOf(weight) === "original" ? "" : String(weightOf(weight));
+    pre.style.color = black ? "#000" : "";
+    const side = marginPx(margin);
+    pre.style.paddingLeft = pre.style.paddingRight = side === MARGIN_DEFAULT ? "" : `${side}px`;
     pre.style.fontFamily = FONT_STACKS[font] || "";
     pre.style.fontSize = sizePx(size) ? `${sizePx(size)}px` : "";
   }
@@ -954,6 +1098,14 @@ export function createFeed(root, source, options = {}) {
     }
   }
 
+  // The theme can change while articles are open; their images need to follow it
+  const syncFrameTheme = () => {
+    const dark = document.body.classList.contains("dark");
+    for (const it of items) it.el.querySelector("iframe")?.contentDocument?.documentElement?.classList.toggle("dark", dark);
+  };
+  const themeObs = new MutationObserver(syncFrameTheme);
+  themeObs.observe(document.body, { attributes: true, attributeFilter: ["class"] });
+
   setMode(opts.mode);
   attachPageInput(document);
   window.addEventListener("resize", () => {
@@ -1043,8 +1195,7 @@ export function createFeed(root, source, options = {}) {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
       for (const it of items) {
         const iframe = it.el.querySelector("iframe");
-        const doc = iframe?.contentDocument;
-        if (doc?.documentElement) iframe.style.height = doc.documentElement.scrollHeight + "px";
+        if (iframe) fitFrame(iframe);
       }
       const item = items.find((it) => it.n.id === pos.newsletter_id);
       if (!item) return;
@@ -1081,6 +1232,7 @@ export function createFeed(root, source, options = {}) {
       destroyed = true;
       ctrl.abort();
       resizeObs.disconnect();
+      themeObs.disconnect();
       zones.remove();
       footer.remove();
       safeProbe.remove();
